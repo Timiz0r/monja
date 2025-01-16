@@ -1,2 +1,3 @@
 [toolchain]
+# using for edition 2024; can bring back to stable later
 channel = "nightly-2025-01-08"
