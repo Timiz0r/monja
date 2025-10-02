@@ -16,18 +16,25 @@ Monja file structure /
 
 .monja-set.toml
     # if a set, for instance, only contains ~/.config/foo, can avoid annoying to navigate nesting
-    root = '~/'
+    # root = '.config/foo'
+    # noting that this root is relative to a profile's root, hence a relative path and no `~/`
+    root = ''
 
-    # will also do packages later. still mulling if to support yay/pacman only or not.
-    # probably will support more, and will have .monja-profile contain a command format for adding
-    # plus a way to remap package names
+    # will also do packages later.
+    # will probably allow multiple sets of packages -- one for each source: pacman, aur, snap, etc
+    # will also have a command template
+    # would also perhaps need an ordering mechanism -- to start with pacman, then yay, etc.
+    #   also may imply some sort of bootstrapping commands
+
 
 .monja-dir.toml
+    # would set owner and group to current user
+    # would generally be a noop for git
+
+    # perms not in v1
     # follows getfacl and setfacl conventions
-    # since not meant to be run under sudo, will not be able to set owner or group. could change later tho
     [perms.default]
-    # default perms for the current folder
-    # also will be considered the perms, by default, for everything in the folder
+    # default perms for the current folder. is recursive
     [perms.files]
     # files and directories separated out for readability
     [perms.directories]
@@ -37,7 +44,8 @@ Monja file structure /
     # todo: will probably go with exacl crate, which may effect the serialization
 
     # useful for broad directories like /.config
-    noclean = true
+    # cleaning a later feature
+    clean_on_pull = true
 
 
 Special local files
@@ -48,24 +56,13 @@ Special local files
             "set2",
             "set1",
         ]
-
-        [default-set]
-        object = "set1"
+        new_file_set = "set1" # or last by default
 
     ~/.monja-index.toml
-        will map every file to an associated set
-        TODO: not meant to be edited, so might be better to just expose viewing this as a command
-            this only really becomes useful if we can avoid regenerating it fully for each push.
-                since local file edits are done without running cli, we don't get this.
-                unless we add shell hooks, which may indeed be useful but not a v1 feature.
-                so probably wont have this file initially.
-                and also sqlite is likely better anyway.
-                TODO: keep these design notes if we delete this from this file.
-        when the file is modified and needs to be synced back to monjadir, it uses this set
-        if a file is contained in multiple sets, the latest set it used
-        overrides can be added via [default-set]
-            this can be done for files, but it's perhaps more preferred to add the file to the appropriate later set
-            this is most useful for directories. we can add a file from a "default set", and any future changes get applied to a different set
+        will map every local file to an associated set
+        gets refreshed each pull
+        needed in case monjadir changes what set will be used when pushing back
+        when a file is modified and needs to be synced back to monjadir, it uses this set
 
     ~/.monjaignore
         ignorefile that keeps stuff from being pushed to monja and keeps stuff from being cleaned by monja
@@ -73,9 +70,12 @@ Special local files
 command-line interface
     dry run of course
 
+    note: prob not doing any cleaning to start
+
     push -- have monja scan local files for changes and update monjadir
+        does not add new files
     pull -- have monja modify local files
-        clean -- if a directory is in monja and there are local objects not in monja, delete them
+        clean (comes later) -- if a directory is in monjadir and there are local objects not in monjadir, delete them
             clean by default; prompt with list by default; allow force; allow noclean
             TODO: might split off into another command. if someone wants to pull a change without having pushed prior, dont want to be annoying
                 on the other hand, it would be confusing if making  removing from somewhere else, pulling, and wondering why the removed thing is still around
@@ -111,3 +111,16 @@ design thoughts
             though, since we'll probably allow user-provided command format, integration testing is still doable. still thinking about it, and package management hasnt even been designed yet.
         and should the lib get more complex over time, we can add unit tests without first having to factor things out of cli. though may need to factor out fs stuff -- such is the gamble.
 
+rsync
+    idea is that rsync is a better way to batch copy files
+    also want to support a more manual approach, so implement both
+
+    Can use rsync like…
+    rsync -avR /foo/./bar/baz.c /tmp/
+    Where -R is relative
+    And the middle dot cuts off the foo
+    Which should work since the managed files will all be relative to a folder
+
+    Also, rsync supports multiple src files and single destination (directory, in our case)
+
+    For syncing back, we group by sets, since we can only specify one destination
