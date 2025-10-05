@@ -1,19 +1,9 @@
-use crate::monja::{AbsolutePath, repo};
-use ignore::WalkBuilder;
-use relative_path::{RelativePath, RelativePathBuf};
 use std::{collections::HashMap, io};
 
-struct FileIndex {
-    set_mapping: HashMap<FilePath, repo::SetName>,
-}
-impl FileIndex {
-    fn load(root: &AbsolutePath) -> FileIndex {
-        todo!()
-    }
-    fn get(&self, path: &FilePath) -> Option<&repo::SetName> {
-        self.set_mapping.get(path)
-    }
-}
+use ignore::WalkBuilder;
+use relative_path::{RelativePath, RelativePathBuf};
+
+use crate::monja::{AbsolutePath, repo};
 
 #[derive(Hash, PartialEq, Eq)]
 pub(crate) struct FilePath {
@@ -23,6 +13,7 @@ impl FilePath {
     pub(crate) fn new(object_path: RelativePathBuf) -> FilePath {
         FilePath { path: object_path }
     }
+
     pub(crate) fn relative_path(&self) -> &RelativePath {
         &self.path
     }
@@ -51,67 +42,6 @@ pub(crate) struct LocalState {
     pub untracked_files: Vec<FilePath>,
     pub missing_sets: Vec<(repo::SetName, Vec<FilePath>)>,
     pub missing_files: Vec<(repo::SetName, Vec<FilePath>)>,
-}
-
-impl LocalState {
-    // a previous implementation of these returned Option(impl Iterator...).
-    // however, to support multiple iteration, we no longer do this.
-    // nested slices arent viable because of the nested vectors -- the outer needs some sort of allocation.
-    // instead, we'll just expose the mutable vecs and expect them to be unmodified.
-
-    // TODO: remove old implementation once in at least one git commit
-    // for these implementations, we use iterators and options because we need to know if they're empty
-    // and using slices for nested vectors isnt viable, at least without boxes
-    // admittedly not sure whats better design-wise, but at least this works fine
-    // pub(crate) fn files_to_push(
-    //     &self,
-    // ) -> Option<impl Iterator<Item = (&repo::SetName, impl Iterator<Item = &FilePath>)>> {
-    //     // TODO: learn macros
-    //     if self.files_to_push.is_empty() {
-    //         None
-    //     } else {
-    //         Some(
-    //             self.files_to_push
-    //                 .iter()
-    //                 .map(|pair| (&pair.0, pair.1.iter())),
-    //         )
-    //     }
-    // }
-
-    // pub(crate) fn untracked_files(&self) -> Option<impl Iterator<Item = &FilePath>> {
-    //     if self.untracked_files.is_empty() {
-    //         None
-    //     } else {
-    //         Some(self.untracked_files.iter())
-    //     }
-    // }
-
-    // pub(crate) fn missing_sets(
-    //     &self,
-    // ) -> Option<impl Iterator<Item = (&repo::SetName, impl Iterator<Item = &FilePath>)>> {
-    //     if self.missing_sets.is_empty() {
-    //         None
-    //     } else {
-    //         Some(
-    //             self.missing_sets
-    //                 .iter()
-    //                 .map(|pair| (&pair.0, pair.1.iter())),
-    //         )
-    //     }
-    // }
-    // pub(crate) fn missing_files(
-    //     &self,
-    // ) -> Option<impl Iterator<Item = (&repo::SetName, impl Iterator<Item = &FilePath>)>> {
-    //     if self.missing_files.is_empty() {
-    //         None
-    //     } else {
-    //         Some(
-    //             self.missing_files
-    //                 .iter()
-    //                 .map(|pair| (&pair.0, pair.1.iter())),
-    //         )
-    //     }
-    // }
 }
 
 pub(crate) fn retrieve_state(profile: &MonjaProfile, repo: &repo::Repo) -> LocalState {
@@ -171,4 +101,15 @@ fn walk(root: &AbsolutePath) -> impl Iterator<Item = io::Result<FilePath>> {
             path: RelativePathBuf::from_path(entry.path()).unwrap(),
         })
     })
+}
+struct FileIndex {
+    set_mapping: HashMap<FilePath, repo::SetName>,
+}
+impl FileIndex {
+    fn load(root: &AbsolutePath) -> FileIndex {
+        todo!()
+    }
+    fn get(&self, path: &FilePath) -> Option<&repo::SetName> {
+        self.set_mapping.get(path)
+    }
 }

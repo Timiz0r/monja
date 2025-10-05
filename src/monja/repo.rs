@@ -1,10 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use relative_path::{RelativePath, RelativePathBuf};
+use walkdir::WalkDir;
 
 use crate::monja::AbsolutePath;
 use crate::monja::local;
@@ -70,8 +71,8 @@ impl Display for SetName {
 pub(crate) struct Set {
     root: RelativePathBuf,
     absolute_root: AbsolutePath,
-    directories: HashMap<ObjectPath, Directory>,
-    files: HashMap<ObjectPath, File>,
+    // directories: HashMap<ObjectPath, Directory>,
+    // files: HashMap<ObjectPath, File>,
     locally_mapped_files: HashMap<local::FilePath, File>,
 }
 impl Set {
@@ -88,35 +89,89 @@ impl Set {
         &self.root
     }
 }
-//  TODO: am expecting this design to become necessary, though it isnt right now
-// in particular, we might track cleanup state through this
-pub(crate) struct File {
-    repo_path: PathBuf,
-    local_path: PathBuf,
-}
+
+// TODO: am expecting this design to become necessary, though it isnt right now
+// for instance, we might track cleanup state through this
+// additionally, the directory struct might become the representation of a future monja-dir.toml
+pub(crate) struct File {}
 impl File {}
 
-pub(crate) struct Directory {
-    repo_path: PathBuf,
-    files: Vec<File>,
-    noclean: bool,
+pub(crate) struct Directory {}
+impl Directory {}
 
-    found_locally: bool,
-}
-impl Directory {
-    pub(crate) fn found_locally(&self) -> bool {
-        self.found_locally
+pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo> {
+    let read_dir = std::fs::read_dir(root)?;
+    let mut set_info = vec![];
+    let mut errors = vec![];
+
+    // versus ::partition, less vector allocations, since we can unwrap results here
+    for result in read_dir {
+        match result {
+            Err(err) => errors.push(err),
+            Ok(res) if res.path().is_dir() => {
+                match res.file_name().to_str() {
+                    Some(str) => set_info.push((SetName(str.to_string()), res.path())),
+                    // this is so unlikely to happen that a static error is sufficient
+                    None => errors.push(std::io::Error::other(
+                        "Unable to convert dir name into set name.",
+                    )),
+                };
+            }
+            _ => {}
+        };
+    }
+    let set_info = set_info;
+    let errors = errors;
+
+    if !errors.is_empty() {
+        // TODO: when we're doing custom errors, use all collected errors
+        return Err(errors
+            .into_iter()
+            .next()
+            .expect("Already checked that the errors vector isn't empty"));
     }
 
-    pub(crate) fn delete(&self) -> std::io::Result<()> {
-        std::fs::remove_dir_all(&self.repo_path)
+    let mut sets = HashMap::with_capacity(set_info.len());
+    let mut errors = vec![];
+    for (set_name, set_path) in set_info {
+        let mut set = Set {
+            root: "todo!()".into(),
+            absolute_root: AbsolutePath::new("todo!()".into()).unwrap(),
+            locally_mapped_files: HashMap::new(),
+        };
+
+        for entry in WalkDir::new(&set_path) {
+            match entry {
+                Ok(entry) => _ = set.locally_mapped_files.insert(
+                    local::FilePath::new(
+                        RelativePathBuf::from_path(
+                            entry
+                                .path()
+                                .strip_prefix(&set_path)
+                                .expect("The entry path should start with set_path, since that's what we called it with."))
+                        .expect("Stripping of the prefix should make path relative"),
+                    ),
+                    File { },
+                ),
+                Err(err) => errors.push(err),
+            };
+        }
+
+        sets.insert(set_name, set);
+    }
+    let sets = sets;
+    let errors = errors;
+
+    if errors.is_empty() {
+        // TODO: all errors
+        return Err(errors
+            .into_iter()
+            .next()
+            .expect("Already checked that the errors vector isn't empty")
+            .into());
     }
 
-    pub(crate) fn write_dir_config(&self) -> std::io::Result<()> {
-        todo!()
-    }
+    Ok(Repo { sets })
 }
 
-pub(crate) fn initialize_full_state(root: &Path) -> Repo {
-    todo!()
-}
+// fn set_state(root: &AbsolutePath, )

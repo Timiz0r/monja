@@ -1,0 +1,7 @@
+edition = "2024"
+
+# if we're feeling adventurous, or they get stabilized one day
+# unstable_features = true
+# reorder_impl_items = true
+# imports_granularity = "Crate"
+# group_imports = "StdExternalCrate"

@@ -40,7 +40,7 @@ impl MonjaProfile {}
 
 // TODO: return result and less unwraps
 pub fn push(profile: &local::MonjaProfile) {
-    let repo = repo::initialize_full_state(profile.repo_root());
+    let repo = repo::initialize_full_state(profile.repo_root()).unwrap();
     let local_state = local::retrieve_state(profile, &repo);
 
     let mut cont = true;
@@ -104,13 +104,14 @@ pub fn push(profile: &local::MonjaProfile) {
             set.absolute_root(),
             files
                 .iter()
+                // TODO: could move this logic to repo, since it knows both local and repo paths, plus how to map
                 .map(|f| set.relative_root().relative(f.relative_path()).to_path("")),
         )
         .unwrap();
     }
 }
 
-pub fn list_untracked(profile: &MonjaProfile) {
+pub fn local_status(profile: &MonjaProfile) {
     todo!()
 }
 
@@ -148,6 +149,6 @@ where
     match status.status.success() {
         true => Ok(()),
         // TODO: dont really want io errors, so all this is just temp
-        false => Err(std::io::Error::from(std::io::ErrorKind::Other)),
+        false => Err(std::io::Error::other("Failed")),
     }
 }
