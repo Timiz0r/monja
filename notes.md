@@ -86,7 +86,7 @@ TODO: this will come a bit later after we've implemented better push and cleanup
     * clean (comes later) -- if a directory is in monjadir and there are local objects not in monjadir, delete them
         * clean by default; prompt with list by default; allow force; allow noclean
         * TODO: might split off into another command. if someone wants to pull a change without having pushed prior, dont want to be annoying
-            * on the other hand, it would be confusing if making  removing from somewhere else, pulling, and wondering why the removed thing is still around
+            * on the other hand, it would be confusing if removing from repo, pulling, and wondering why the removed thing is still around
             * maybe a quickpull that  does no clean?
     * since will be run under the assumption all files have right owner and group, also need a mode that can be invoked under sudo (explicit or implicit?) to force ownership
         * will failfast instead of partial syncing

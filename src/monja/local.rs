@@ -3,7 +3,7 @@ use std::{collections::HashMap, io};
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
 
-use crate::monja::{AbsolutePath, repo};
+use crate::monja::{AbsolutePath, MonjaProfile, repo};
 
 #[derive(Hash, PartialEq, Eq)]
 pub(crate) struct FilePath {
@@ -16,24 +16,6 @@ impl FilePath {
 
     pub(crate) fn relative_path(&self) -> &RelativePath {
         &self.path
-    }
-}
-
-// TODO: do a pass on encapsulation for all structs
-pub struct MonjaProfile {
-    local_root: AbsolutePath,
-    repo_root: AbsolutePath,
-    target_sets: Vec<repo::SetName>,
-    new_file_set: repo::SetName,
-}
-
-impl MonjaProfile {
-    pub(crate) fn repo_root(&self) -> &AbsolutePath {
-        &self.repo_root
-    }
-
-    pub(crate) fn local_root(&self) -> &AbsolutePath {
-        &self.local_root
     }
 }
 

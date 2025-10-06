@@ -5,14 +5,16 @@ use std::{
     process::{Command, Stdio},
 };
 
-mod local;
-mod repo;
+use serde::{Deserialize, Serialize};
 
-pub(crate) struct AbsolutePath {
+pub(crate) mod local;
+pub(crate) mod repo;
+
+pub struct AbsolutePath {
     path: PathBuf,
 }
 impl AbsolutePath {
-    pub(crate) fn new(path: PathBuf) -> Result<AbsolutePath, std::io::Error> {
+    pub fn new(path: PathBuf) -> Result<AbsolutePath, std::io::Error> {
         std::fs::canonicalize(path).map(|path| AbsolutePath { path })
     }
 }
@@ -30,17 +32,16 @@ impl AsRef<Path> for AbsolutePath {
 }
 
 pub struct MonjaProfile {
-    local_root: AbsolutePath,
-    repo_root: PathBuf,
-    target_sets: Vec<repo::SetName>,
-    new_file_set: repo::SetName,
+    pub local_root: AbsolutePath,
+    pub repo_root: AbsolutePath,
+
+    pub target_sets: Vec<repo::SetName>,
+    pub new_file_set: repo::SetName,
 }
 
-impl MonjaProfile {}
-
 // TODO: return result and less unwraps
-pub fn push(profile: &local::MonjaProfile) {
-    let repo = repo::initialize_full_state(profile.repo_root()).unwrap();
+pub fn push(profile: &MonjaProfile) {
+    let repo = repo::initialize_full_state(&profile.repo_root).unwrap();
     let local_state = local::retrieve_state(profile, &repo);
 
     let mut cont = true;
@@ -100,7 +101,7 @@ pub fn push(profile: &local::MonjaProfile) {
             .expect("Already checked for missing sets.");
 
         rsync(
-            profile.local_root().join(set.relative_root().to_path("")),
+            profile.local_root.join(set.relative_root().to_path("")),
             set.absolute_root(),
             files
                 .iter()

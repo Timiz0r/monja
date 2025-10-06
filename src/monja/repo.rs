@@ -5,6 +5,7 @@ use std::{
 };
 
 use relative_path::{RelativePath, RelativePathBuf};
+use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::monja::AbsolutePath;
@@ -60,7 +61,7 @@ impl ObjectPath {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub(crate) struct SetName(String);
 impl Display for SetName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
