@@ -1,18 +1,24 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    path::Path,
 };
 
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-use crate::monja::AbsolutePath;
-use crate::monja::local;
+use crate::{AbsolutePath, local};
 
 pub(crate) struct Repo {
     sets: HashMap<SetName, Set>,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct SetName(pub String);
+impl Display for SetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 impl Repo {
@@ -58,14 +64,6 @@ impl ObjectPath {
             path,
             local_path: local::FilePath::new(local_path),
         }
-    }
-}
-
-#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
-pub(crate) struct SetName(String);
-impl Display for SetName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 

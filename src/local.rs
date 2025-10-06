@@ -3,7 +3,7 @@ use std::{collections::HashMap, io};
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
 
-use crate::monja::{AbsolutePath, MonjaProfile, repo};
+use crate::{AbsolutePath, MonjaProfile, repo};
 
 #[derive(Hash, PartialEq, Eq)]
 pub(crate) struct FilePath {

@@ -11,3 +11,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.17"
 toml = "0.9.7"
 walkdir = "2.5.0"
+
+[dev-dependencies]
+googletest = "0.14.2"
+tempfile = "3.23.0"

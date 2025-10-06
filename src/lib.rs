@@ -5,10 +5,10 @@ use std::{
     process::{Command, Stdio},
 };
 
-use serde::{Deserialize, Serialize};
-
 pub(crate) mod local;
 pub(crate) mod repo;
+
+pub use repo::SetName;
 
 pub struct AbsolutePath {
     path: PathBuf,
@@ -36,7 +36,7 @@ pub struct MonjaProfile {
     pub repo_root: AbsolutePath,
 
     pub target_sets: Vec<repo::SetName>,
-    pub new_file_set: repo::SetName,
+    pub new_file_set: Option<repo::SetName>,
 }
 
 // TODO: return result and less unwraps

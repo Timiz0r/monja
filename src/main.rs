@@ -3,9 +3,7 @@ use std::{fs::File, path::PathBuf};
 use clap::{Args, Parser, Subcommand, command};
 use serde::{Deserialize, Serialize};
 
-use crate::monja::MonjaProfile;
-
-mod monja;
+use monja::MonjaProfile;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -18,6 +16,8 @@ struct Cli {
 enum Commands {
     Push(PushCommand),
     Pull(PullCommand),
+    // TODO: maybe split between init local and setup repo
+    // TODO: note to self: make first set named after hostname
     Init(InitCommand),
     LocalStatus(LocalStatusCommand),
     ChangeProfile(ChangeProfileCommand),
@@ -43,7 +43,7 @@ impl Commands {
 struct PushCommand {}
 impl PushCommand {
     fn execute(self, profile: MonjaProfile) {
-        crate::monja::push(&profile);
+        monja::push(&profile);
     }
 }
 
@@ -102,6 +102,7 @@ fn main() {
 #[serde(rename_all = "snake_case")]
 struct MonjaProfileConfig {
     pub monja_dir: PathBuf,
-    pub target_sets: Vec<crate::monja::repo::SetName>,
-    pub new_file_set: crate::monja::repo::SetName,
+    pub target_sets: Vec<monja::SetName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_file_set: Option<monja::SetName>,
 }
