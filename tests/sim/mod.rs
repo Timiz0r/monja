@@ -18,8 +18,8 @@ impl Simulator {
         let repo_dir = FsBuilder::create("repo");
         let local_dir = FsBuilder::create("local");
         let profile = MonjaProfile {
-            repo_root: AbsolutePath::new(repo_dir.tempdir.path().to_path_buf()).unwrap(),
-            local_root: AbsolutePath::new(local_dir.tempdir.path().to_path_buf()).unwrap(),
+            repo_root: AbsolutePath::from_path(repo_dir.tempdir.path().to_path_buf()).unwrap(),
+            local_root: AbsolutePath::from_path(local_dir.tempdir.path().to_path_buf()).unwrap(),
             target_sets: vec![],
             new_file_set: None,
         };

@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    path::PathBuf,
 };
 
 use relative_path::{RelativePath, RelativePathBuf};
@@ -13,7 +14,7 @@ pub(crate) struct Repo {
     sets: HashMap<SetName, Set>,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct SetName(pub String);
 impl Display for SetName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -44,55 +45,78 @@ impl Repo {
     }
 }
 
-#[derive(Hash, PartialEq, Eq)]
-pub(crate) struct ObjectPath {
-    path: RelativePathBuf,
-    local_path: local::FilePath,
-}
-impl ObjectPath {
-    fn new(set_name: &SetName, root: &RelativePath, object_path: &RelativePath) -> ObjectPath {
-        let mut path = RelativePathBuf::new();
-        path.push(&set_name.0);
-        path.push(root);
-        path.push(object_path);
-
-        let mut local_path = RelativePathBuf::new();
-        local_path.push(root);
-        local_path.push(object_path);
-
-        ObjectPath {
-            path,
-            local_path: local::FilePath::new(local_path),
-        }
-    }
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) struct SetConfig {
+    // used to be called root, but it was hard to disambiguate with other uses of the term
+    shortcut: PathBuf,
 }
 
 pub(crate) struct Set {
-    root: RelativePathBuf,
-    absolute_root: AbsolutePath,
+    name: SetName,
+    // TODO: validate and test that this is a child of the local root, to avoid directory traversal attacks
+    shortcut: RelativePathBuf,
+    root: AbsolutePath,
     // directories: HashMap<ObjectPath, Directory>,
-    // files: HashMap<ObjectPath, File>,
     locally_mapped_files: HashMap<local::FilePath, File>,
 }
 impl Set {
+    pub(crate) fn name(&self) -> &SetName {
+        &self.name
+    }
+
     pub(crate) fn tracks_file(&self, local_file: &local::FilePath) -> bool {
-        // TODO: hashset?
         self.locally_mapped_files.contains_key(local_file)
     }
 
-    pub(crate) fn absolute_root(&self) -> &AbsolutePath {
-        &self.absolute_root
+    pub(crate) fn root(&self) -> &AbsolutePath {
+        &self.root
     }
 
-    pub(crate) fn relative_root(&self) -> &RelativePath {
-        &self.root
+    pub(crate) fn shortcut(&self) -> &RelativePath {
+        &self.shortcut
+    }
+
+    pub(crate) fn files(&self) -> impl Iterator<Item = &File> {
+        self.locally_mapped_files.values()
+    }
+}
+
+pub(crate) struct FilePath {
+    path_in_set: RelativePathBuf,
+    local_path: local::FilePath,
+}
+
+impl FilePath {
+    fn new(shortcut: &RelativePath, path_in_set: RelativePathBuf) -> FilePath {
+        let mut local_path = RelativePathBuf::new();
+        local_path.push(shortcut);
+        local_path.push(&path_in_set);
+        let local_path = local::FilePath::new(local_path);
+
+        FilePath {
+            path_in_set,
+            local_path,
+        }
+    }
+
+    // choosing to encapsulate since we have strict logic for instantiation
+    pub(crate) fn path_in_set(&self) -> &RelativePathBuf {
+        &self.path_in_set
+    }
+
+    pub(crate) fn local_path(&self) -> &local::FilePath {
+        &self.local_path
     }
 }
 
 // TODO: am expecting this design to become necessary, though it isnt right now
-// for instance, we might track cleanup state through this
+// for instance, we might track perms or cleanup state through these
 // additionally, the directory struct might become the representation of a future monja-dir.toml
-pub(crate) struct File {}
+pub(crate) struct File {
+    pub owning_set: SetName,
+    pub path: FilePath,
+}
 impl File {}
 
 pub(crate) struct Directory {}
@@ -133,29 +157,41 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
     let mut sets = HashMap::with_capacity(set_info.len());
     let mut errors = vec![];
     for (set_name, set_path) in set_info {
-        let mut set = Set {
-            root: "todo!()".into(),
-            absolute_root: AbsolutePath::new("todo!()".into()).unwrap(),
-            locally_mapped_files: HashMap::new(),
-        };
+        let set_config = std::fs::read(set_path.join(".monja-set.toml")).unwrap();
+        let set_config: SetConfig = toml::from_slice(&set_config).unwrap();
 
+        let shortcut = RelativePathBuf::from_path(&set_config.shortcut).unwrap();
+
+        let mut locally_mapped_files = HashMap::new();
         for entry in WalkDir::new(&set_path) {
             match entry {
-                Ok(entry) => _ = set.locally_mapped_files.insert(
-                    local::FilePath::new(
-                        RelativePathBuf::from_path(
-                            entry
-                                .path()
-                                .strip_prefix(&set_path)
-                                .expect("The entry path should start with set_path, since that's what we called it with."))
-                        .expect("Stripping of the prefix should make path relative"),
-                    ),
-                    File { },
-                ),
+                Ok(entry) => {
+                    let path_in_set = entry
+                        .path()
+                        .strip_prefix(&set_path)
+                        .expect("The entry path should start with set_path, since that's what we called it with.");
+                    let path_in_set = RelativePathBuf::from_path(path_in_set)
+                        .expect("Stripping of the prefix should make path relative");
+                    let path = FilePath::new(&shortcut, path_in_set);
+
+                    let file = File {
+                        owning_set: set_name.clone(),
+                        path,
+                    };
+
+                    locally_mapped_files.insert(file.path.local_path().clone(), file);
+                }
                 Err(err) => errors.push(err),
             };
         }
 
+        let root = AbsolutePath::from_path(root.join(&set_name.0)).unwrap();
+        let set = Set {
+            name: set_name.clone(),
+            shortcut,
+            root,
+            locally_mapped_files,
+        };
         sets.insert(set_name, set);
     }
     let sets = sets;

@@ -2,20 +2,32 @@ use std::{collections::HashMap, io};
 
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
+use serde::{Deserialize, Serialize};
 
 use crate::{AbsolutePath, MonjaProfile, repo};
 
-#[derive(Hash, PartialEq, Eq)]
-pub(crate) struct FilePath {
-    path: RelativePathBuf,
-}
+#[derive(Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[serde(from = "std::path::PathBuf")]
+#[serde(into = "std::path::PathBuf")]
+pub(crate) struct FilePath(RelativePathBuf);
 impl FilePath {
     pub(crate) fn new(object_path: RelativePathBuf) -> FilePath {
-        FilePath { path: object_path }
+        FilePath(object_path)
     }
 
     pub(crate) fn relative_path(&self) -> &RelativePath {
-        &self.path
+        &self.0
+    }
+}
+// kinda ideally dont want to do this, but this is easiest way to get it (de)serialized
+impl From<FilePath> for std::path::PathBuf {
+    fn from(value: FilePath) -> Self {
+        value.0.to_path("") // aka dont specify a base and keep it relative
+    }
+}
+impl From<std::path::PathBuf> for FilePath {
+    fn from(value: std::path::PathBuf) -> Self {
+        FilePath(RelativePathBuf::from_path(value).expect("Path is a path"))
     }
 }
 
@@ -78,19 +90,32 @@ fn walk(root: &AbsolutePath) -> impl Iterator<Item = io::Result<FilePath>> {
         .add_custom_ignore_filename(".monjaignore")
         .follow_links(true)
         .build();
-    walker.flatten().map(|entry| {
-        Ok(FilePath {
-            path: RelativePathBuf::from_path(entry.path()).unwrap(),
-        })
-    })
+    walker
+        .flatten()
+        .map(|entry| Ok(FilePath(RelativePathBuf::from_path(entry.path()).unwrap())))
 }
-struct FileIndex {
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct FileIndex {
+    #[serde(flatten)]
     set_mapping: HashMap<FilePath, repo::SetName>,
 }
 impl FileIndex {
     fn load(root: &AbsolutePath) -> FileIndex {
-        todo!()
+        let index = std::fs::read(root.join(".monja-index.toml")).unwrap();
+
+        toml::from_slice(&index).unwrap()
     }
+
+    // preferring a vec for ownership and len()
+    pub(crate) fn new(set_mapping: HashMap<FilePath, repo::SetName>) -> FileIndex {
+        FileIndex { set_mapping }
+    }
+
+    pub(crate) fn save(&self, root: &AbsolutePath) {
+        std::fs::write(root, toml::to_string(self).unwrap()).unwrap();
+    }
+
     fn get(&self, path: &FilePath) -> Option<&repo::SetName> {
         self.set_mapping.get(path)
     }

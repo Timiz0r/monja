@@ -1,9 +1,6 @@
-use std::{fs::File, path::PathBuf};
-
 use clap::{Args, Parser, Subcommand, command};
-use serde::{Deserialize, Serialize};
 
-use monja::MonjaProfile;
+use monja::{MonjaProfile, MonjaProfileConfig};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -85,24 +82,15 @@ fn main() {
     let local_root = profile_path.clone();
     profile_path.push(".monja-profile.toml");
 
-    let profile_config = std::fs::read_to_string(profile_path).unwrap();
-    let profile_config: MonjaProfileConfig = toml::from_str(&profile_config).unwrap();
+    let profile_config = std::fs::read(profile_path).unwrap();
+    let profile_config: MonjaProfileConfig = toml::from_slice(&profile_config).unwrap();
     let profile = MonjaProfile {
-        local_root: monja::AbsolutePath::new(local_root).unwrap(),
-        repo_root: monja::AbsolutePath::new(profile_config.monja_dir).unwrap(),
+        local_root: monja::AbsolutePath::from_path(local_root).unwrap(),
+        repo_root: monja::AbsolutePath::from_path(profile_config.monja_dir).unwrap(),
         target_sets: profile_config.target_sets,
         new_file_set: profile_config.new_file_set,
     };
 
     let cli = Cli::parse();
     cli.command.execute(profile);
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-struct MonjaProfileConfig {
-    pub monja_dir: PathBuf,
-    pub target_sets: Vec<monja::SetName>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_file_set: Option<monja::SetName>,
 }

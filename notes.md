@@ -19,9 +19,9 @@
 
 ```toml
 # if a set, for instance, only contains ~/.config/foo, can avoid annoying to navigate nesting
-# root = '.config/foo'
-# noting that this root is relative to a profile's root, hence a relative path and no `~/`
-root = ''
+# shortcut = '.config/foo'
+# noting that this shortcut is relative to a profile's root, hence a relative path and no `~/`
+shortcut = ''
 
 # will also do packages later.
 # will probably allow multiple sets of packages -- one for each source: pacman, aur, snap, etc
@@ -81,13 +81,17 @@ TODO: this will come a bit later after we've implemented better push and cleanup
 * note: prob not doing any cleaning to start
 
 * push -- have monja scan local files for changes and update monjadir
-    does not add new files
+    * does not add files untracked by index, at least not yet.
+        * perhaps add an interactive mode to select which files to add?
+    
 * pull -- have monja modify local files
     * clean (comes later) -- if a directory is in monjadir and there are local objects not in monjadir, delete them
         * clean by default; prompt with list by default; allow force; allow noclean
         * TODO: might split off into another command. if someone wants to pull a change without having pushed prior, dont want to be annoying
             * on the other hand, it would be confusing if removing from repo, pulling, and wondering why the removed thing is still around
             * maybe a quickpull that  does no clean?
+        * tbd: clean by comparing indices or clean with full scan?
+            * probably both. two modes for pull, and only scan for clean command.
     * since will be run under the assumption all files have right owner and group, also need a mode that can be invoked under sudo (explicit or implicit?) to force ownership
         * will failfast instead of partial syncing
         * will support a way to skip
