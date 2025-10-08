@@ -1,4 +1,4 @@
-use crate::sim::{Manipulate, Simulator, Validate};
+use crate::sim::{LocalValidation, SetManipulation, Simulator};
 use monja::{MonjaProfile, SetName};
 
 use googletest::prelude::*;
@@ -17,7 +17,7 @@ fn simple_set() {
         ..old
     });
 
-    set_operation! { Manipulate, sim, "simple",
+    fs_operation! { SetManipulation, sim, "simple",
         dir "foo"
             dir "bar/baz"
                 file "cake" "cake"
@@ -32,7 +32,7 @@ fn simple_set() {
 
     monja::pull(&sim.profile());
 
-    set_operation! { Validate, sim, "simple",
+    fs_operation! { LocalValidation, sim,
         dir "foo"
             dir "bar/baz"
                 file "cake" "cake"

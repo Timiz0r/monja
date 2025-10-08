@@ -72,13 +72,13 @@ impl Simulator {
     // adding is handled by set_operation!
     pub(crate) fn rem_set(&mut self, name: SetName) -> &mut Self {
         let path = self.repo_dir.path().join(name.0);
-        Manipulate::remove_dir(path);
+        SetManipulation::remove_dir(path);
 
         self
     }
 }
 
-pub(crate) trait Handler {
+pub(crate) trait OperationHandler {
     fn dir<P>(path: P)
     where
         P: AsRef<Path>;
@@ -96,8 +96,8 @@ pub(crate) trait Handler {
         C: AsRef<[u8]>;
 }
 
-pub(crate) struct Manipulate;
-impl Handler for Manipulate {
+pub(crate) struct SetManipulation;
+impl OperationHandler for SetManipulation {
     fn dir<P>(path: P)
     where
         P: AsRef<Path>,
@@ -129,8 +129,8 @@ impl Handler for Manipulate {
     }
 }
 
-pub(crate) struct Validate;
-impl Handler for Validate {
+pub(crate) struct LocalValidation;
+impl OperationHandler for LocalValidation {
     fn dir<P>(path: P)
     where
         P: AsRef<Path>,
@@ -168,103 +168,114 @@ impl Handler for Validate {
 // while reasonably readable, it was also somewhat hard to read and get parenthesis matched up correctly
 // though macros have horrible diagnostics when there's an issue, it overall works well!
 #[allow(unused_macros)]
-macro_rules! set_operation {
+macro_rules! fs_operation {
     // largely follows https://danielkeep.github.io/tlborm/book/aeg-ook.html
 
-    // this doesn't really need to be last, since the internal stuff won't match this.
+    // these don't really need to be last, since the internal stuff won't match this.
     // so putting it at the top to stand out more
-    ($handler:ident, $sim:expr, $set:literal, $($tokens:tt)*) => {
+    (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
             let path = $sim.profile().repo_root.join($set);
-            <$handler as $crate::sim::Handler>::dir(&path);
-            set_operation!(@general ($handler, path); ($($tokens)*));
+            fs_operation!(@start (SetManipulation, path); ($($tokens)*));
         }
+    };
+
+    (LocalValidation, $sim:expr, $($tokens:tt)*) => {
+        {
+            let path = $sim.profile().local_root;
+            fs_operation!(@start (LocalValidation, path); ($($tokens)*));
+        }
+    };
+
+    (@start ($handler:ident, $path_var:ident); $tokens:tt) => {
+        <$handler as $crate::sim::OperationHandler>::dir(&$path_var);
+        fs_operation!(@general ($handler, $path_var); $tokens);
     };
 
     (@general ($handler:ident, $path_var:ident); (file $path:literal $contents:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::Handler>::file(&path, $contents);
+            <$handler as $crate::sim::OperationHandler>::file(&path, $contents);
         }
 
-        set_operation!(@general ($handler, $path_var); ($($tail)*));
+        fs_operation!(@general ($handler, $path_var); ($($tail)*));
     };
 
     (@general ($handler:ident, $path_var:ident); (remfile $path:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::Handler>::remove_file(path);
+            <$handler as $crate::sim::OperationHandler>::remove_file(path);
         }
 
-        set_operation!(@general ($handler, $path_var); ($($tail)*));
+        fs_operation!(@general ($handler, $path_var); ($($tail)*));
     };
 
     (@general ($handler:ident, $path_var:ident); (remdir $path:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::Handler>::remove_dir(path);
+            <$handler as $crate::sim::OperationHandler>::remove_dir(path);
         }
 
-        set_operation!(@general ($handler, $path_var); ($($tail)*));
+        fs_operation!(@general ($handler, $path_var); ($($tail)*));
     };
 
     (@general ($handler:ident, $path_var:ident); (dir $path:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::Handler>::dir(&path);
+            <$handler as $crate::sim::OperationHandler>::dir(&path);
 
-            set_operation!(@extract_inner ($handler, path); (); (); ($($tail)*));
+            fs_operation!(@extract_inner ($handler, path); (); (); ($($tail)*));
         }
-        set_operation!(@skip_to_outer ($handler, $path_var); (); ($($tail)*));
+        fs_operation!(@skip_to_outer ($handler, $path_var); (); ($($tail)*));
     };
 
     (@general $symbols:tt; ()) => {};
 
     // if we hit `end` with depth 0, take the $buf and run it
     (@extract_inner $symbols:tt; (); ($($buffer:tt)*); (end $($tail:tt)*)) => {
-        set_operation!(@general $symbols; ($($buffer)*));
+        fs_operation!(@general $symbols; ($($buffer)*));
     };
 
     // controls depth, based on subsequent `dir`s and matching `end`s
     // we need to add them into the buffer because they are to be evaluated with the about depth-0 `end`
     (@extract_inner $symbols:tt; ($($depth:tt)*); ($($buffer:tt)*); (dir $path:literal $($tail:tt)*)) => {
-        set_operation!(@extract_inner $symbols; (@ $($depth)*); ($($buffer)* dir $path); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; (@ $($depth)*); ($($buffer)* dir $path); ($($tail)*));
     };
     (@extract_inner $symbols:tt; (@ $($depth:tt)*); ($($buffer:tt)*); (end $($tail:tt)*)) => {
-        set_operation!(@extract_inner $symbols; ($($depth)*); ($($buffer)* end); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; ($($depth)*); ($($buffer)* end); ($($tail)*));
     };
 
     // the example has a pretty strict grammar, which makes the "catch-all" easy.
     // the only way I can think to do it for our grammar is with multiple cases
     (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (file $path:literal $contents:literal $($tail:tt)*)) => {
-        set_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path $contents); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path $contents); ($($tail)*));
     };
     (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (remfile $path:literal $($tail:tt)*)) => {
-        set_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
     };
     (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (remdir $path:literal $($tail:tt)*)) => {
-        set_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
     };
 
     // and now the same sort of ones for skipping
     (@skip_to_outer $symbols:tt; (); (end $($tail:tt)*)) => {
-        set_operation!(@general $symbols; ($($tail)*));
+        fs_operation!(@general $symbols; ($($tail)*));
     };
 
     (@skip_to_outer $symbols:tt; ($($depth:tt)*); (dir $path:literal $($tail:tt)*)) => {
-        set_operation!(@skip_to_outer $symbols; (@ $($depth)*); ($($tail)*));
+        fs_operation!(@skip_to_outer $symbols; (@ $($depth)*); ($($tail)*));
     };
     (@skip_to_outer $symbols:tt; (@ $($depth:tt)*); (end $($tail:tt)*)) => {
-        set_operation!(@skip_to_outer $symbols; ($($depth)*); ($($tail)*));
+        fs_operation!(@skip_to_outer $symbols; ($($depth)*); ($($tail)*));
     };
 
     (@skip_to_outer $symbols:tt; $depth:tt; (file $path:literal $contents:literal $($tail:tt)*)) => {
-        set_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
+        fs_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
     };
     (@skip_to_outer $symbols:tt; $depth:tt; (remfile $path:literal $($tail:tt)*)) => {
-        set_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
+        fs_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
     };
     (@skip_to_outer $symbols:tt; $depth:tt; (remdir $path:literal $($tail:tt)*)) => {
-        set_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
+        fs_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
     };
 }
