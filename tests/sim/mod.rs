@@ -213,7 +213,7 @@ macro_rules! set_operation {
             let path = $path_var.join($path);
             <$handler as $crate::sim::Handler>::dir(&path);
 
-            set_operation!(@extract_inner ($handler, $path_var); (); (); ($($tail)*));
+            set_operation!(@extract_inner ($handler, path); (); (); ($($tail)*));
         }
         set_operation!(@skip_to_outer ($handler, $path_var); (); ($($tail)*));
     };
