@@ -45,11 +45,12 @@ impl Repo {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct SetConfig {
     // used to be called root, but it was hard to disambiguate with other uses of the term
-    shortcut: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shortcut: Option<PathBuf>,
 }
 
 pub(crate) struct Set {
@@ -157,10 +158,14 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
     let mut sets = HashMap::with_capacity(set_info.len());
     let mut errors = vec![];
     for (set_name, set_path) in set_info {
-        let set_config = std::fs::read(set_path.join(".monja-set.toml")).unwrap();
-        let set_config: SetConfig = toml::from_slice(&set_config).unwrap();
+        let set_config = match std::fs::read(set_path.join(".monja-set.toml")) {
+            Ok(raw) => toml::from_slice(&raw).unwrap(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => SetConfig::default(),
+            Err(e) => panic!("{}", e), //TODO: dont forget about this. keyword unwrap
+        };
 
-        let shortcut = RelativePathBuf::from_path(&set_config.shortcut).unwrap();
+        let shortcut = set_config.shortcut.unwrap_or("".into());
+        let shortcut = RelativePathBuf::from_path(shortcut).unwrap();
 
         let mut locally_mapped_files = HashMap::new();
         for entry in WalkDir::new(&set_path) {
@@ -197,7 +202,7 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
     let sets = sets;
     let errors = errors;
 
-    if errors.is_empty() {
+    if !errors.is_empty() {
         // TODO: all errors
         return Err(errors
             .into_iter()

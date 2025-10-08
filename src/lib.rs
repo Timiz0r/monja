@@ -213,7 +213,7 @@ pub fn pull(profile: &MonjaProfile) {
             .map(|(local_path, repo_file)| (local_path.clone(), repo_file.owning_set.clone())),
     );
     let index = local::FileIndex::new(index_files);
-    index.save(&profile.repo_root);
+    index.save(&profile.local_root);
 }
 
 pub fn local_status(profile: &MonjaProfile) {
@@ -234,6 +234,7 @@ where
             dest.as_ref().to_str().unwrap(),
         ])
         .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()?;
 
     {

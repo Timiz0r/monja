@@ -113,7 +113,11 @@ impl FileIndex {
     }
 
     pub(crate) fn save(&self, root: &AbsolutePath) {
-        std::fs::write(root, toml::to_string(self).unwrap()).unwrap();
+        std::fs::write(
+            root.join(".monja-index.toml"),
+            toml::to_string(self).unwrap(),
+        )
+        .unwrap();
     }
 
     fn get(&self, path: &FilePath) -> Option<&repo::SetName> {
