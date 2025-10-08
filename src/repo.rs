@@ -14,6 +14,7 @@ pub(crate) struct Repo {
     sets: HashMap<SetName, Set>,
 }
 
+// TODO: might as well deref to str and add a from
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct SetName(pub String);
 impl Display for SetName {
@@ -170,7 +171,7 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
         let mut locally_mapped_files = HashMap::new();
         for entry in WalkDir::new(&set_path) {
             match entry {
-                Ok(entry) => {
+                Ok(entry) if entry.file_type().is_file() => {
                     let path_in_set = entry
                         .path()
                         .strip_prefix(&set_path)
@@ -187,6 +188,7 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
                     locally_mapped_files.insert(file.path.local_path().clone(), file);
                 }
                 Err(err) => errors.push(err),
+                _ => {}
             };
         }
 
