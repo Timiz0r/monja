@@ -1,9 +1,11 @@
 use googletest::prelude::*;
 use monja::{MonjaProfile, SetName};
 
-use crate::sim::Simulator;
+use crate::sim::{Manipulate, Simulator, Validate};
 
-pub mod sim;
+#[allow(dead_code)]
+#[macro_use]
+mod sim;
 
 // TODO: index verification
 
@@ -15,25 +17,33 @@ fn simple_set() {
         ..old
     });
 
-    #[rustfmt::skip]
-    sim.set(SetName("simple".into()), |s| _ = s
-        .dir("foo", |d| _ = d
-            .dir("bar/baz", |d| _ = d
-                .file("a", "a")))
-        .dir("apple", |d| _ = d
-            .file("pie", "pie"))
-        .file("blueberry", "tart"));
+    set_operation! {Manipulate, sim, "simple",
+        dir "foo"
+            dir "bar/baz"
+                file "cake" "cake"
+            end
+        end
+        dir "apple"
+            file "pie" "pie"
+            file "pasta" "pasta"
+        end
+        file "blueberry" "tart"
+    };
 
     monja::pull(sim.profile());
 
-    #[rustfmt::skip]
-    sim.validate_set(SetName("simple".into()), |s| _ = s
-        .validate_dir("foo", |d| _ = d
-            .validate_dir("bar/baz", |d| _ = d
-                .validate_file("a", "a")))
-        .validate_dir("apple", |d| _ = d
-            .validate_file("pie", "pie"))
-        .validate_file("blueberry", "tart"));
+    set_operation! {Validate, sim, "simple",
+        dir "foo"
+            dir "bar/baz"
+                file "cake" "cake"
+            end
+        end
+        dir "apple"
+            file "pie" "pie"
+            file "pasta" "pasta"
+        end
+        file "blueberry" "tart"
+    };
 }
 
 #[gtest]
@@ -43,10 +53,19 @@ fn multiple_sets() {}
 fn shortcuts() {}
 
 #[gtest]
+fn multiple_sets_different_shortcuts_same_local_files() {}
+
+#[gtest]
 fn missing_set() {}
 
 #[gtest]
 fn directory_traversal() {}
+
+#[gtest]
+fn missing_local_folder() {}
+
+#[gtest]
+fn missing_repo_folder() {}
 
 fn set_names<S, N>(names: N) -> Vec<SetName>
 where

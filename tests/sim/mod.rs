@@ -1,11 +1,6 @@
-use std::{
-    fs,
-    ops::{Deref, DerefMut},
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
 use googletest::prelude::*;
-
 use monja::{AbsolutePath, MonjaProfile, SetName};
 use tempfile::TempDir;
 
@@ -16,18 +11,24 @@ use tempfile::TempDir;
 // granted, this is just a simulator, so it wouldnt be a big deal
 // if verification operations allowed file operations.
 pub(crate) struct Simulator {
-    repo_dir: FsBuilder,
-    local_dir: FsBuilder,
+    repo_dir: TempDir,
+    local_dir: TempDir,
     profile: MonjaProfile,
 }
 
 impl Simulator {
     pub(crate) fn create() -> Self {
-        let repo_dir = FsBuilder::create("repo");
-        let local_dir = FsBuilder::create("local");
+        let repo_dir = tempfile::Builder::new()
+            .prefix("MonjaRepo")
+            .tempdir()
+            .unwrap();
+        let local_dir = tempfile::Builder::new()
+            .prefix("MonjaLocal")
+            .tempdir()
+            .unwrap();
         let profile = MonjaProfile {
-            repo_root: AbsolutePath::from_path(repo_dir.tempdir.path().to_path_buf()).unwrap(),
-            local_root: AbsolutePath::from_path(local_dir.tempdir.path().to_path_buf()).unwrap(),
+            repo_root: AbsolutePath::from_path(repo_dir.path().to_path_buf()).unwrap(),
+            local_root: AbsolutePath::from_path(local_dir.path().to_path_buf()).unwrap(),
             target_sets: vec![],
             new_file_set: None,
         };
@@ -52,126 +53,202 @@ impl Simulator {
         self
     }
 
-    pub(crate) fn set<B>(&mut self, name: SetName, builder: B) -> &mut Self
-    where
-        B: FnMut(&mut DirBuilder),
-    {
-        self.repo_dir.dir(name.0, builder);
-        self
-    }
-
+    // adding is handled by set_operation!
     pub(crate) fn rem_set(&mut self, name: SetName) -> &mut Self {
-        self.repo_dir.rem_dir(name.0);
+        let path = self.repo_dir.path().join(name.0);
+        Manipulate::remove_dir(path);
 
         self
     }
+}
 
-    // main difference to set() is lack of mutability
-    pub(crate) fn validate_set<B>(&self, name: SetName, builder: B) -> &Self
+pub(crate) trait Handler {
+    fn dir<P>(path: P)
     where
-        B: FnMut(&DirBuilder),
-    {
-        // this also takes care of making sure the dir exists, since it's now part of the path
-        self.repo_dir.validate_dir(name.0, builder);
+        P: AsRef<Path>;
+    fn remove_dir<P>(path: P)
+    where
+        P: AsRef<Path>;
 
-        self
-    }
-}
-
-pub(crate) struct FsBuilder {
-    tempdir: TempDir,
-    // with deref, saves code duplication
-    dir_builder: DirBuilder,
-}
-impl FsBuilder {
-    pub(crate) fn create(prefix: &str) -> Self {
-        let tempdir = tempfile::Builder::new().prefix(prefix).tempdir().unwrap();
-        FsBuilder {
-            dir_builder: DirBuilder {
-                path: tempdir.path().to_path_buf(),
-            },
-            tempdir,
-        }
-    }
-}
-
-impl Deref for FsBuilder {
-    type Target = DirBuilder;
-
-    fn deref(&self) -> &Self::Target {
-        &self.dir_builder
-    }
-}
-
-impl DerefMut for FsBuilder {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.dir_builder
-    }
-}
-
-pub(crate) struct DirBuilder {
-    path: PathBuf,
-}
-impl DirBuilder {
-    pub(crate) fn dir<P, B>(&mut self, path: P, mut builder: B) -> &mut Self
+    fn file<P, C>(path: P, contents: C)
     where
         P: AsRef<Path>,
-        B: FnMut(&mut DirBuilder),
-    {
-        let path = self.path.join(path.as_ref());
-        fs::create_dir_all(&path).unwrap();
+        C: AsRef<[u8]>;
+    fn remove_file<P, C>(path: P)
+    where
+        P: AsRef<Path>,
+        C: AsRef<[u8]>;
+}
 
-        let mut dir_builder = DirBuilder { path };
-        builder(&mut dir_builder);
-
-        self
-    }
-
-    pub(crate) fn rem_dir<P>(&mut self, path: P) -> &mut Self
+pub(crate) struct Manipulate;
+impl Handler for Manipulate {
+    fn dir<P>(path: P)
     where
         P: AsRef<Path>,
     {
-        let path = self.path.join(path.as_ref());
+        fs::create_dir_all(path).unwrap();
+    }
+
+    fn remove_dir<P>(path: P)
+    where
+        P: AsRef<Path>,
+    {
         fs::remove_dir_all(path).unwrap();
-
-        self
     }
 
-    pub(crate) fn validate_dir<P, B>(&self, path: P, mut builder: B) -> &Self
+    fn file<P, C>(path: P, contents: C)
     where
         P: AsRef<Path>,
-        B: FnMut(&DirBuilder),
+        C: AsRef<[u8]>,
     {
-        let path = self.path.join(path.as_ref());
+        fs::write(path, contents).unwrap();
+    }
 
+    fn remove_file<P, C>(path: P)
+    where
+        P: AsRef<Path>,
+        C: AsRef<[u8]>,
+    {
+        fs::remove_file(path).unwrap();
+    }
+}
+
+pub(crate) struct Validate;
+impl Handler for Validate {
+    fn dir<P>(path: P)
+    where
+        P: AsRef<Path>,
+    {
         let dir = fs::read_dir(&path);
         expect_that!(dir, ok(anything()));
-        // hypothetically, we could stop here, since sub directories and files definitely dont exist,
-        // but we'll keep going for logging reasons
-
-        let dir_builder = DirBuilder { path };
-        builder(&dir_builder);
-
-        self
     }
 
-    pub(crate) fn file<C: AsRef<[u8]>>(&mut self, name: &str, contents: C) -> &mut Self {
-        fs::write(self.path.join(name), contents).unwrap();
-
-        self
+    fn remove_dir<P>(_path: P)
+    where
+        P: AsRef<Path>,
+    {
+        panic!("Not possible to remove_dir for validation.")
     }
 
-    pub(crate) fn rem_file(&mut self, name: &str) -> &mut Self {
-        fs::remove_file(self.path.join(name)).unwrap();
-
-        self
-    }
-
-    pub(crate) fn validate_file<C: AsRef<[u8]>>(&self, name: &str, expected_contents: C) -> &Self {
-        let contents = fs::read(self.path.join(name)).unwrap();
-
+    fn file<P, C>(path: P, expected_contents: C)
+    where
+        P: AsRef<Path>,
+        C: AsRef<[u8]>,
+    {
+        let contents = fs::read(path).unwrap();
         expect_that!(contents, container_eq(expected_contents.as_ref().to_vec()));
-
-        self
     }
+
+    fn remove_file<P, C>(_path: P)
+    where
+        P: AsRef<Path>,
+        C: AsRef<[u8]>,
+    {
+        panic!("Not possible to remove_file for validation.")
+    }
+}
+
+// a previous version used lambda-based (nested) builders to do the same thing.
+// while reasonably readable, it was also somewhat hard to read and get parenthesis matched up correctly
+// though macros have horrible diagnostics when there's an issue, it overall works well!
+#[allow(unused_macros)]
+macro_rules! set_operation {
+    // largely follows https://danielkeep.github.io/tlborm/book/aeg-ook.html
+
+    // this doesn't really need to be last, since the internal stuff won't match this.
+    // so putting it at the top to stand out more
+    ($handler:ident, $sim:expr, $set:literal, $($tokens:tt)*) => {
+        {
+            let path = $sim.profile().repo_root.join($set);
+            <$handler as $crate::sim::Handler>::dir(&path);
+            set_operation!(@general ($handler, path); ($($tokens)*));
+        }
+    };
+
+    (@general ($handler:ident, $path_var:ident); (file $path:literal $contents:literal $($tail:tt)*)) => {
+        {
+            let path = $path_var.join($path);
+            <$handler as $crate::sim::Handler>::file(&path, $contents);
+        }
+
+        set_operation!(@general ($handler, $path_var); ($($tail)*));
+    };
+
+    (@general ($handler:ident, $path_var:ident); (remfile $path:literal $($tail:tt)*)) => {
+        {
+            let path = $path_var.join($path);
+            <$handler as $crate::sim::Handler>::remove_file(path);
+        }
+
+        set_operation!(@general ($handler, $path_var); ($($tail)*));
+    };
+
+    (@general ($handler:ident, $path_var:ident); (remdir $path:literal $($tail:tt)*)) => {
+        {
+            let path = $path_var.join($path);
+            <$handler as $crate::sim::Handler>::remove_dir(path);
+        }
+
+        set_operation!(@general ($handler, $path_var); ($($tail)*));
+    };
+
+    (@general ($handler:ident, $path_var:ident); (dir $path:literal $($tail:tt)*)) => {
+        {
+            let path = $path_var.join($path);
+            <$handler as $crate::sim::Handler>::dir(&path);
+
+            set_operation!(@extract_inner ($handler, $path_var); (); (); ($($tail)*));
+        }
+        set_operation!(@skip_to_outer ($handler, $path_var); (); ($($tail)*));
+    };
+
+    (@general $symbols:tt; ()) => {};
+
+    // if we hit `end` with depth 0, take the $buf and run it
+    (@extract_inner $symbols:tt; (); ($($buffer:tt)*); (end $($tail:tt)*)) => {
+        set_operation!(@general $symbols; ($($buffer)*));
+    };
+
+    // controls depth, based on subsequent `dir`s and matching `end`s
+    // we need to add them into the buffer because they are to be evaluated with the about depth-0 `end`
+    (@extract_inner $symbols:tt; ($($depth:tt)*); ($($buffer:tt)*); (dir $path:literal $($tail:tt)*)) => {
+        set_operation!(@extract_inner $symbols; (@ $($depth)*); ($($buffer)* dir $path); ($($tail)*));
+    };
+    (@extract_inner $symbols:tt; (@ $($depth:tt)*); ($($buffer:tt)*); (end $($tail:tt)*)) => {
+        set_operation!(@extract_inner $symbols; ($($depth)*); ($($buffer)* end); ($($tail)*));
+    };
+
+    // the example has a pretty strict grammar, which makes the "catch-all" easy.
+    // the only way I can think to do it for our grammar is with multiple cases
+    (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (file $path:literal $contents:literal $($tail:tt)*)) => {
+        set_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path $contents); ($($tail)*));
+    };
+    (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (remfile $path:literal $($tail:tt)*)) => {
+        set_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
+    };
+    (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (remdir $path:literal $($tail:tt)*)) => {
+        set_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
+    };
+
+    // and now the same sort of ones for skipping
+    (@skip_to_outer $symbols:tt; (); (end $($tail:tt)*)) => {
+        set_operation!(@general $symbols; ($($tail)*));
+    };
+
+    (@skip_to_outer $symbols:tt; ($($depth:tt)*); (dir $path:literal $($tail:tt)*)) => {
+        set_operation!(@skip_to_outer $symbols; (@ $($depth)*); ($($tail)*));
+    };
+    (@skip_to_outer $symbols:tt; (@ $($depth:tt)*); (end $($tail:tt)*)) => {
+        set_operation!(@skip_to_outer $symbols; ($($depth)*); ($($tail)*));
+    };
+
+    (@skip_to_outer $symbols:tt; $depth:tt; (file $path:literal $contents:literal $($tail:tt)*)) => {
+        set_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
+    };
+    (@skip_to_outer $symbols:tt; $depth:tt; (remfile $path:literal $($tail:tt)*)) => {
+        set_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
+    };
+    (@skip_to_outer $symbols:tt; $depth:tt; (remdir $path:literal $($tail:tt)*)) => {
+        set_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
+    };
 }
