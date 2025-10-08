@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand, command};
 
-use monja::{MonjaProfile, MonjaProfileConfig};
+use monja::{AbsolutePath, MonjaProfile};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -76,20 +76,16 @@ impl ChangeProfileCommand {
     }
 }
 
+// TODO: some things named root should probably be base?
+
 fn main() {
     let mut profile_path =
         std::env::home_dir().expect("We got bigger problems if there's no home.");
-    let local_root = profile_path.clone();
+    let local_root = AbsolutePath::from_path(profile_path.clone()).unwrap();
     profile_path.push(".monja-profile.toml");
+    let profile_path = AbsolutePath::from_path(profile_path).unwrap();
 
-    let profile_config = std::fs::read(profile_path).unwrap();
-    let profile_config: MonjaProfileConfig = toml::from_slice(&profile_config).unwrap();
-    let profile = MonjaProfile {
-        local_root: monja::AbsolutePath::from_path(local_root).unwrap(),
-        repo_root: monja::AbsolutePath::from_path(profile_config.monja_dir).unwrap(),
-        target_sets: profile_config.target_sets,
-        new_file_set: profile_config.new_file_set,
-    };
+    let profile = monja::MonjaProfileConfig::load(&profile_path).into_config(local_root);
 
     let cli = Cli::parse();
     cli.command.execute(profile);

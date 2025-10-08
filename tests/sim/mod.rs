@@ -1,7 +1,8 @@
 use std::{fs, path::Path};
 
+use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetName};
+
 use googletest::prelude::*;
-use monja::{AbsolutePath, MonjaProfile, SetName};
 use tempfile::TempDir;
 
 // the types here use mutability to indicate file system operations,
@@ -13,7 +14,7 @@ use tempfile::TempDir;
 pub(crate) struct Simulator {
     repo_dir: TempDir,
     local_dir: TempDir,
-    profile: MonjaProfile,
+    profile_path: AbsolutePath,
 }
 
 impl Simulator {
@@ -26,30 +27,45 @@ impl Simulator {
             .prefix("MonjaLocal")
             .tempdir()
             .unwrap();
-        let profile = MonjaProfile {
-            repo_root: AbsolutePath::from_path(repo_dir.path().to_path_buf()).unwrap(),
-            local_root: AbsolutePath::from_path(local_dir.path().to_path_buf()).unwrap(),
+
+        let profile_config = MonjaProfileConfig {
+            monja_dir: repo_dir.path().to_path_buf(),
             target_sets: vec![],
             new_file_set: None,
         };
 
+        let profile_path = local_dir.path().join(".monja-profile.toml");
+        // AbsolutePath requires that the path exist, so we'll make it first.
+        // typically, the profile should already be user-created in practice, so this behavior is desireable.
+        // also, since this is a fresh dir, no overwriting happens here.
+        fs::write(&profile_path, "").unwrap();
+        let profile_path =
+            AbsolutePath::from_path(local_dir.path().join(".monja-profile.toml")).unwrap();
+        profile_config.save(&profile_path);
+
         Simulator {
             repo_dir,
             local_dir,
-            profile,
+            profile_path,
         }
     }
 
-    pub(crate) fn profile(&self) -> &MonjaProfile {
-        &self.profile
+    pub(crate) fn profile(&self) -> MonjaProfile {
+        // we previously stored an instance of the profile
+        // however, we changed it to reading a file to get coverage of the code paths
+        let local_root = AbsolutePath::from_path(self.local_dir.path().to_path_buf()).unwrap();
+
+        MonjaProfileConfig::load(&self.profile_path).into_config(local_root)
     }
 
     // pass by value to move old profile
-    pub(crate) fn configure_profile<P>(mut self, mut config: P) -> Self
+    pub(crate) fn configure_profile<P>(self, mut config: P) -> Self
     where
         P: FnMut(MonjaProfile) -> MonjaProfile,
     {
-        self.profile = config(self.profile);
+        let profile = config(self.profile());
+        profile.save_config(&self.profile_path);
+
         self
     }
 

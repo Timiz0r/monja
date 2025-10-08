@@ -1,7 +1,7 @@
-use googletest::prelude::*;
+use crate::sim::{Manipulate, Simulator, Validate};
 use monja::{MonjaProfile, SetName};
 
-use crate::sim::{Manipulate, Simulator, Validate};
+use googletest::prelude::*;
 
 #[allow(dead_code)]
 #[macro_use]
@@ -17,7 +17,7 @@ fn simple_set() {
         ..old
     });
 
-    set_operation! {Manipulate, sim, "simple",
+    set_operation! { Manipulate, sim, "simple",
         dir "foo"
             dir "bar/baz"
                 file "cake" "cake"
@@ -30,9 +30,9 @@ fn simple_set() {
         file "blueberry" "tart"
     };
 
-    monja::pull(sim.profile());
+    monja::pull(&sim.profile());
 
-    set_operation! {Validate, sim, "simple",
+    set_operation! { Validate, sim, "simple",
         dir "foo"
             dir "bar/baz"
                 file "cake" "cake"

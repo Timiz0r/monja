@@ -41,13 +41,48 @@ pub struct MonjaProfileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_file_set: Option<SetName>,
 }
+impl MonjaProfileConfig {
+    pub fn load(config_path: &AbsolutePath) -> MonjaProfileConfig {
+        let config = std::fs::read(config_path).unwrap();
+
+        toml::from_slice(&config).unwrap()
+    }
+
+    pub fn save(&self, config_path: &AbsolutePath) {
+        std::fs::write(config_path, toml::to_string(&self).unwrap()).unwrap();
+    }
+
+    pub fn into_config(self, local_root: AbsolutePath) -> MonjaProfile {
+        MonjaProfile {
+            local_root,
+            monja_dir: self.monja_dir.clone(),
+            repo_root: AbsolutePath::from_path(self.monja_dir).unwrap(),
+            target_sets: self.target_sets,
+            new_file_set: self.new_file_set,
+        }
+    }
+}
 
 pub struct MonjaProfile {
     pub local_root: AbsolutePath,
+
+    pub monja_dir: PathBuf,
     pub repo_root: AbsolutePath,
 
     pub target_sets: Vec<repo::SetName>,
     pub new_file_set: Option<repo::SetName>,
+}
+
+impl MonjaProfile {
+    // we take a path to file file, not folder, since the profile could be one located in the repo, pointed to by local
+    pub fn save_config(&self, config_path: &AbsolutePath) {
+        let config = MonjaProfileConfig {
+            monja_dir: self.monja_dir.clone(),
+            target_sets: self.target_sets.clone(),
+            new_file_set: self.new_file_set.clone(),
+        };
+        config.save(config_path);
+    }
 }
 
 // TODO: return result and less unwraps
