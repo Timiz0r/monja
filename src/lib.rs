@@ -261,10 +261,14 @@ where
     Dest: AsRef<Path>,
     Files: Iterator<Item: AsRef<Path>>,
 {
+    // we use checksum mainly because, in integration tests, some files have same size and modified time
+    // this could hypothetically happen in practice, so checksum is perhaps good.
+    // note that file sizes still get compared before checksum, so most cases will still be fast.
     let mut child = Command::new("rsync")
         .args([
             "-av",
             "--files-from=-",
+            "--checksum",
             source.as_ref().to_str().unwrap(),
             dest.as_ref().to_str().unwrap(),
         ])

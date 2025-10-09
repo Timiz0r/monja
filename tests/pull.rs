@@ -47,7 +47,60 @@ fn simple_set() {
 }
 
 #[gtest]
-fn multiple_sets() {}
+fn multiple_sets() {
+    let mut sim = Simulator::create();
+    sim = sim.configure_profile(|old| MonjaProfile {
+        target_sets: set_names(["set1", "set2"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "foo"
+            dir "bar"
+                file "baz" "set1baz"
+            end
+        end
+        file "set1only" "set1only"
+    };
+    fs_operation! { SetManipulation, sim, "set2",
+        dir "foo"
+            dir "bar"
+                file "baz" "set2baz"
+            end
+        end
+        file "set2only" "set2only"
+    };
+
+    monja::pull(&sim.profile());
+
+    fs_operation! { LocalValidation, sim,
+        dir "foo"
+            dir "bar"
+                file "baz" "set2baz"
+            end
+        end
+        file "set1only" "set1only"
+        file "set2only" "set2only"
+    };
+
+    // reverse!
+    sim = sim.configure_profile(|old| MonjaProfile {
+        target_sets: set_names(["set2", "set1"]),
+        ..old
+    });
+
+    monja::pull(&sim.profile());
+
+    fs_operation! { LocalValidation, sim,
+        dir "foo"
+            dir "bar"
+                file "baz" "set1baz"
+            end
+        end
+        file "set1only" "set1only"
+        file "set2only" "set2only"
+    };
+}
 
 #[gtest]
 fn shortcuts() {}

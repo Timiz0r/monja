@@ -89,11 +89,10 @@ pub(crate) trait OperationHandler {
     fn file<P, C>(path: P, contents: C)
     where
         P: AsRef<Path>,
-        C: AsRef<[u8]>;
+        C: AsRef<str>;
     fn remove_file<P, C>(path: P)
     where
-        P: AsRef<Path>,
-        C: AsRef<[u8]>;
+        P: AsRef<Path>;
 }
 
 pub(crate) struct SetManipulation;
@@ -115,15 +114,14 @@ impl OperationHandler for SetManipulation {
     fn file<P, C>(path: P, contents: C)
     where
         P: AsRef<Path>,
-        C: AsRef<[u8]>,
+        C: AsRef<str>,
     {
-        fs::write(path, contents).unwrap();
+        fs::write(path, contents.as_ref()).unwrap();
     }
 
     fn remove_file<P, C>(path: P)
     where
         P: AsRef<Path>,
-        C: AsRef<[u8]>,
     {
         fs::remove_file(path).unwrap();
     }
@@ -149,16 +147,15 @@ impl OperationHandler for LocalValidation {
     fn file<P, C>(path: P, expected_contents: C)
     where
         P: AsRef<Path>,
-        C: AsRef<[u8]>,
+        C: AsRef<str>,
     {
-        let contents = fs::read(path).unwrap();
-        expect_that!(contents, container_eq(expected_contents.as_ref().to_vec()));
+        let contents = fs::read_to_string(path).unwrap();
+        expect_that!(contents, eq(expected_contents.as_ref()));
     }
 
     fn remove_file<P, C>(_path: P)
     where
         P: AsRef<Path>,
-        C: AsRef<[u8]>,
     {
         panic!("Not possible to remove_file for validation.")
     }
