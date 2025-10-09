@@ -1,5 +1,5 @@
 use crate::sim::{LocalValidation, SetManipulation, Simulator};
-use monja::{MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
+use monja::{MonjaProfileConfig, SetConfig, SetName};
 
 use googletest::prelude::*;
 
@@ -152,9 +152,6 @@ fn shortcuts() {
         end
     };
 }
-
-#[gtest]
-fn multiple_sets_different_shortcuts_same_local_files() {}
 
 #[gtest]
 fn directory_traversal() {}

@@ -85,46 +85,53 @@ impl Simulator {
     // adding is handled by set_operation!
     pub(crate) fn rem_set(&mut self, name: SetName) -> &mut Self {
         let path = self.repo_dir.path().join(name.0);
-        SetManipulation::remove_dir(path);
+        fs::remove_dir_all(path).unwrap();
 
         self
     }
 }
 
 pub(crate) trait OperationHandler {
-    fn dir<P>(path: P)
+    fn dir<P>(&mut self, path: P)
     where
         P: AsRef<Path>;
-    fn remove_dir<P>(path: P)
+    fn remove_dir<P>(&mut self, path: P)
     where
         P: AsRef<Path>;
 
-    fn file<P, C>(path: P, contents: C)
+    fn file<P, C>(&mut self, path: P, contents: C)
     where
         P: AsRef<Path>,
         C: AsRef<str>;
-    fn remove_file<P, C>(path: P)
+    fn remove_file<P, C>(&mut self, path: P)
     where
         P: AsRef<Path>;
+
+    fn finish(&self);
 }
 
 pub(crate) struct SetManipulation;
+impl SetManipulation {
+    pub(crate) fn new(_: &Simulator) -> Self {
+        SetManipulation
+    }
+}
 impl OperationHandler for SetManipulation {
-    fn dir<P>(path: P)
+    fn dir<P>(&mut self, path: P)
     where
         P: AsRef<Path>,
     {
         fs::create_dir_all(path).unwrap();
     }
 
-    fn remove_dir<P>(path: P)
+    fn remove_dir<P>(&mut self, path: P)
     where
         P: AsRef<Path>,
     {
         fs::remove_dir_all(path).unwrap();
     }
 
-    fn file<P, C>(path: P, contents: C)
+    fn file<P, C>(&mut self, path: P, contents: C)
     where
         P: AsRef<Path>,
         C: AsRef<str>,
@@ -132,17 +139,24 @@ impl OperationHandler for SetManipulation {
         fs::write(path, contents.as_ref()).unwrap();
     }
 
-    fn remove_file<P, C>(path: P)
+    fn remove_file<P, C>(&mut self, path: P)
     where
         P: AsRef<Path>,
     {
         fs::remove_file(path).unwrap();
     }
+
+    fn finish(&self) {}
 }
 
-pub(crate) struct LocalValidation;
+pub(crate) struct LocalValidation {}
+impl LocalValidation {
+    pub(crate) fn new(_: &Simulator) -> Self {
+        LocalValidation {}
+    }
+}
 impl OperationHandler for LocalValidation {
-    fn dir<P>(path: P)
+    fn dir<P>(&mut self, path: P)
     where
         P: AsRef<Path>,
     {
@@ -150,14 +164,14 @@ impl OperationHandler for LocalValidation {
         expect_that!(dir, ok(anything()));
     }
 
-    fn remove_dir<P>(_path: P)
+    fn remove_dir<P>(&mut self, _path: P)
     where
         P: AsRef<Path>,
     {
         panic!("Not possible to remove_dir for validation.")
     }
 
-    fn file<P, C>(path: P, expected_contents: C)
+    fn file<P, C>(&mut self, path: P, expected_contents: C)
     where
         P: AsRef<Path>,
         C: AsRef<str>,
@@ -166,12 +180,14 @@ impl OperationHandler for LocalValidation {
         expect_that!(contents, eq(expected_contents.as_ref()));
     }
 
-    fn remove_file<P, C>(_path: P)
+    fn remove_file<P, C>(&mut self, _path: P)
     where
         P: AsRef<Path>,
     {
         panic!("Not possible to remove_file for validation.")
     }
+
+    fn finish(&self) {}
 }
 
 // a previous version used lambda-based (nested) builders to do the same thing.
@@ -186,26 +202,29 @@ macro_rules! fs_operation {
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
             let path = $sim.profile().repo_root.join($set);
-            fs_operation!(@start (SetManipulation, path); ($($tokens)*));
+            let mut handler = SetManipulation::new(&$sim);
+            fs_operation!(@start (handler, path); ($($tokens)*));
         }
     };
 
     (LocalValidation, $sim:expr, $($tokens:tt)*) => {
         {
             let path = $sim.profile().local_root;
-            fs_operation!(@start (LocalValidation, path); ($($tokens)*));
+            let mut handler = LocalValidation::new(&$sim);
+            fs_operation!(@start (handler, path); ($($tokens)*));
         }
     };
 
     (@start ($handler:ident, $path_var:ident); $tokens:tt) => {
-        <$handler as $crate::sim::OperationHandler>::dir(&$path_var);
+        $crate::sim::OperationHandler::dir(&mut $handler, &$path_var);
         fs_operation!(@general ($handler, $path_var); $tokens);
+        $crate::sim::OperationHandler::finish(&$handler);
     };
 
     (@general ($handler:ident, $path_var:ident); (file $path:literal $contents:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::OperationHandler>::file(&path, $contents);
+            $crate::sim::OperationHandler::file(&mut $handler, &path, $contents);
         }
 
         fs_operation!(@general ($handler, $path_var); ($($tail)*));
@@ -214,7 +233,7 @@ macro_rules! fs_operation {
     (@general ($handler:ident, $path_var:ident); (remfile $path:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::OperationHandler>::remove_file(path);
+            $crate::sim::OperationHandler::remove_file(&mut $handler, &path);
         }
 
         fs_operation!(@general ($handler, $path_var); ($($tail)*));
@@ -223,7 +242,7 @@ macro_rules! fs_operation {
     (@general ($handler:ident, $path_var:ident); (remdir $path:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::OperationHandler>::remove_dir(path);
+            $crate::sim::OperationHandler::remove_dir(&mut $handler, &path);
         }
 
         fs_operation!(@general ($handler, $path_var); ($($tail)*));
@@ -232,7 +251,7 @@ macro_rules! fs_operation {
     (@general ($handler:ident, $path_var:ident); (dir $path:literal $($tail:tt)*)) => {
         {
             let path = $path_var.join($path);
-            <$handler as $crate::sim::OperationHandler>::dir(&path);
+            $crate::sim::OperationHandler::dir(&mut $handler, &path);
 
             fs_operation!(@extract_inner ($handler, path); (); (); ($($tail)*));
         }
