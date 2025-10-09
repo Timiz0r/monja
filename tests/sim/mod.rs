@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetName};
+use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
 
 use googletest::prelude::*;
 use tempfile::TempDir;
@@ -53,18 +53,31 @@ impl Simulator {
     pub(crate) fn profile(&self) -> MonjaProfile {
         // we previously stored an instance of the profile
         // however, we changed it to reading a file to get coverage of the code paths
-        let local_root = AbsolutePath::from_path(self.local_dir.path().to_path_buf()).unwrap();
+        let local_root = AbsolutePath::from_path(self.local_dir.path()).unwrap();
 
         MonjaProfileConfig::load(&self.profile_path).into_config(local_root)
     }
 
     // pass by value to move old profile
-    pub(crate) fn configure_profile<P>(self, mut config: P) -> Self
+    pub(crate) fn configure_profile<P>(&mut self, mut config: P) -> &mut Self
     where
-        P: FnMut(MonjaProfile) -> MonjaProfile,
+        P: FnMut(MonjaProfileConfig) -> MonjaProfileConfig,
     {
-        let profile = config(self.profile());
-        profile.save_config(&self.profile_path);
+        let profile_config = config(self.profile().config);
+        profile_config.save(&self.profile_path);
+
+        self
+    }
+
+    pub(crate) fn configure_set<P>(&self, set_name: SetName, mut config: P) -> &Self
+    where
+        P: FnMut(SetConfig) -> SetConfig,
+    {
+        let profile = self.profile();
+        let set_config = SetConfig::load(&profile, &set_name);
+        let set_config = config(set_config);
+
+        set_config.save(&profile, &set_name);
 
         self
     }

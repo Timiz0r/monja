@@ -81,9 +81,9 @@ impl ChangeProfileCommand {
 fn main() {
     let mut profile_path =
         std::env::home_dir().expect("We got bigger problems if there's no home.");
-    let local_root = AbsolutePath::from_path(profile_path.clone()).unwrap();
+    let local_root = AbsolutePath::from_path(&profile_path).unwrap();
     profile_path.push(".monja-profile.toml");
-    let profile_path = AbsolutePath::from_path(profile_path).unwrap();
+    let profile_path = AbsolutePath::from_path(&profile_path).unwrap();
 
     let profile = monja::MonjaProfileConfig::load(&profile_path).into_config(local_root);
 

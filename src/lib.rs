@@ -9,6 +9,7 @@ use std::{
 pub(crate) mod local;
 pub(crate) mod repo;
 
+pub use repo::SetConfig;
 pub use repo::SetName;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +17,10 @@ pub struct AbsolutePath {
     path: PathBuf,
 }
 impl AbsolutePath {
-    pub fn from_path(path: PathBuf) -> Result<AbsolutePath, std::io::Error> {
+    pub fn from_path<P>(path: P) -> Result<AbsolutePath, std::io::Error>
+    where
+        P: AsRef<Path>,
+    {
         std::fs::canonicalize(path).map(|path| AbsolutePath { path })
     }
 }
@@ -42,6 +46,7 @@ pub struct MonjaProfileConfig {
     pub new_file_set: Option<SetName>,
 }
 impl MonjaProfileConfig {
+    // we take a path to config file, not folder, since the profile could be one located in the repo, pointed to by local
     pub fn load(config_path: &AbsolutePath) -> MonjaProfileConfig {
         let config = std::fs::read(config_path).unwrap();
 
@@ -55,34 +60,17 @@ impl MonjaProfileConfig {
     pub fn into_config(self, local_root: AbsolutePath) -> MonjaProfile {
         MonjaProfile {
             local_root,
-            monja_dir: self.monja_dir.clone(),
-            repo_root: AbsolutePath::from_path(self.monja_dir).unwrap(),
-            target_sets: self.target_sets,
-            new_file_set: self.new_file_set,
+            repo_root: AbsolutePath::from_path(&self.monja_dir).unwrap(),
+            config: self,
         }
     }
 }
 
 pub struct MonjaProfile {
     pub local_root: AbsolutePath,
-
-    pub monja_dir: PathBuf,
     pub repo_root: AbsolutePath,
 
-    pub target_sets: Vec<repo::SetName>,
-    pub new_file_set: Option<repo::SetName>,
-}
-
-impl MonjaProfile {
-    // we take a path to file file, not folder, since the profile could be one located in the repo, pointed to by local
-    pub fn save_config(&self, config_path: &AbsolutePath) {
-        let config = MonjaProfileConfig {
-            monja_dir: self.monja_dir.clone(),
-            target_sets: self.target_sets.clone(),
-            new_file_set: self.new_file_set.clone(),
-        };
-        config.save(config_path);
-    }
+    pub config: MonjaProfileConfig,
 }
 
 // TODO: return result and less unwraps
@@ -179,7 +167,7 @@ pub fn pull(profile: &MonjaProfile) {
     let mut files: HashMap<&local::FilePath, &repo::File> = HashMap::new();
 
     let mut missing_sets = vec![];
-    for set in profile.target_sets.iter() {
+    for set in profile.config.target_sets.iter() {
         let Some(set) = repo.get_set(set) else {
             missing_sets.push(set);
             continue;

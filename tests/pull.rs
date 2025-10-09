@@ -1,5 +1,5 @@
 use crate::sim::{LocalValidation, SetManipulation, Simulator};
-use monja::{MonjaProfile, SetName};
+use monja::{MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
 
 use googletest::prelude::*;
 
@@ -8,11 +8,12 @@ use googletest::prelude::*;
 mod sim;
 
 // TODO: index verification
+// TODO: special files excluded
 
 #[gtest]
 fn simple_set() {
     let mut sim = Simulator::create();
-    sim = sim.configure_profile(|old| MonjaProfile {
+    sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
     });
@@ -49,7 +50,7 @@ fn simple_set() {
 #[gtest]
 fn multiple_sets() {
     let mut sim = Simulator::create();
-    sim = sim.configure_profile(|old| MonjaProfile {
+    sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
     });
@@ -84,7 +85,7 @@ fn multiple_sets() {
     };
 
     // reverse!
-    sim = sim.configure_profile(|old| MonjaProfile {
+    sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set2", "set1"]),
         ..old
     });
@@ -103,16 +104,63 @@ fn multiple_sets() {
 }
 
 #[gtest]
-fn shortcuts() {}
+fn shortcuts() {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1", "set2", "set3"]),
+        ..old
+    })
+    .configure_set(SetName("set1".into()), |_| SetConfig {
+        shortcut: Some("".into()),
+    })
+    .configure_set(SetName("set2".into()), |_| SetConfig {
+        shortcut: Some(".config".into()),
+    })
+    .configure_set(SetName("set3".into()), |_| SetConfig {
+        shortcut: Some(".config/myconfig".into()),
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir ".config"
+            dir "myconfig"
+                file "foo" "set1"
+            end
+            file "blueberry" "tart1"
+        end
+    };
+    fs_operation! { SetManipulation, sim, "set2",
+        dir "myconfig"
+            file "bar" "set2"
+        end
+        file "blueberry" "tart2"
+    };
+    fs_operation! { SetManipulation, sim, "set3",
+        file "baz" "set3"
+        file "bar" "set3"
+    };
+
+    monja::pull(&sim.profile());
+
+    fs_operation! { LocalValidation, sim,
+        dir ".config"
+            dir "myconfig"
+                file "foo" "set1"
+                file "bar" "set3"
+                file "baz" "set3"
+            end
+            file "blueberry" "tart2"
+        end
+    };
+}
 
 #[gtest]
 fn multiple_sets_different_shortcuts_same_local_files() {}
 
 #[gtest]
-fn missing_set() {}
+fn directory_traversal() {}
 
 #[gtest]
-fn directory_traversal() {}
+fn missing_set() {}
 
 #[gtest]
 fn missing_local_folder() {}

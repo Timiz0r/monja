@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    fs,
     path::PathBuf,
 };
 
@@ -48,10 +49,27 @@ impl Repo {
 
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct SetConfig {
+pub struct SetConfig {
     // used to be called root, but it was hard to disambiguate with other uses of the term
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    shortcut: Option<PathBuf>,
+    pub shortcut: Option<PathBuf>,
+}
+
+impl SetConfig {
+    pub fn load(profile: &crate::MonjaProfile, set_name: &SetName) -> SetConfig {
+        let config_path = profile.repo_root.join(&set_name.0).join(".monja-set.toml");
+        let config = fs::read(config_path).unwrap_or_default();
+
+        toml::from_slice(&config).unwrap()
+    }
+
+    pub fn save(&self, profile: &crate::MonjaProfile, set_name: &SetName) {
+        let set_dir = profile.repo_root.join(&set_name.0);
+        fs::create_dir_all(&set_dir).unwrap();
+
+        let config_path = set_dir.join(".monja-set.toml");
+        fs::write(config_path, toml::to_string(&self).unwrap()).unwrap();
+    }
 }
 
 pub(crate) struct Set {
@@ -125,7 +143,7 @@ pub(crate) struct Directory {}
 impl Directory {}
 
 pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo> {
-    let read_dir = std::fs::read_dir(root)?;
+    let read_dir = fs::read_dir(root)?;
     let mut set_info = vec![];
     let mut errors = vec![];
 
@@ -159,7 +177,7 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
     let mut sets = HashMap::with_capacity(set_info.len());
     let mut errors = vec![];
     for (set_name, set_path) in set_info {
-        let set_config = match std::fs::read(set_path.join(".monja-set.toml")) {
+        let set_config = match fs::read(set_path.join(".monja-set.toml")) {
             Ok(raw) => toml::from_slice(&raw).unwrap(),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => SetConfig::default(),
             Err(e) => panic!("{}", e), //TODO: dont forget about this. keyword unwrap
