@@ -103,13 +103,13 @@ pub(crate) trait OperationHandler {
     fn finish(self);
 }
 
-pub(crate) struct SetManipulation;
-impl SetManipulation {
+pub(crate) struct Manipulation;
+impl Manipulation {
     pub(crate) fn new(_: &Simulator) -> Self {
-        SetManipulation
+        Manipulation
     }
 }
-impl OperationHandler for SetManipulation {
+impl OperationHandler for Manipulation {
     fn dir(&mut self, path: &Path) {
         fs::create_dir_all(path).unwrap();
     }
@@ -132,18 +132,101 @@ impl OperationHandler for SetManipulation {
 pub(crate) struct LocalValidation {
     local_root: PathBuf,
     repo_root: PathBuf,
-    files: HashSet<PathBuf>,
+    general_validation: GeneralValidation,
 }
 impl LocalValidation {
     pub fn new(sim: &Simulator) -> Self {
         LocalValidation {
             local_root: sim.local_dir.path().to_path_buf(),
             repo_root: sim.repo_dir.path().to_path_buf(),
-            files: HashSet::new(),
+            general_validation: GeneralValidation::new(sim),
         }
     }
 }
 impl OperationHandler for LocalValidation {
+    fn dir(&mut self, path: &Path) {
+        self.general_validation.dir(path);
+    }
+
+    fn remove_dir(&mut self, path: &Path) {
+        self.general_validation.remove_dir(path);
+    }
+
+    fn file(&mut self, path: &Path, expected_contents: &str) {
+        self.general_validation.file(path, expected_contents);
+    }
+
+    fn remove_file(&mut self, path: &Path) {
+        self.general_validation.remove_file(path);
+    }
+
+    fn finish(self) {
+        let local_files: HashSet<PathBuf> = WalkDir::new(&self.local_root)
+            .into_iter()
+            .map(|e| e.unwrap())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.into_path())
+            .filter(|p| !monja::is_monja_local_file(p))
+            .filter(|p| !p.starts_with(&self.repo_root))
+            .collect();
+
+        expect_that!(local_files, container_eq(self.general_validation.files));
+    }
+}
+
+pub(crate) struct SetValidation {
+    set_root: PathBuf,
+    general_validation: GeneralValidation,
+}
+impl SetValidation {
+    pub fn new(sim: &Simulator, set_root: &Path) -> Self {
+        SetValidation {
+            set_root: set_root.to_path_buf(),
+            general_validation: GeneralValidation::new(sim),
+        }
+    }
+}
+impl OperationHandler for SetValidation {
+    fn dir(&mut self, path: &Path) {
+        self.general_validation.dir(path);
+    }
+
+    fn remove_dir(&mut self, path: &Path) {
+        self.general_validation.remove_dir(path);
+    }
+
+    fn file(&mut self, path: &Path, expected_contents: &str) {
+        self.general_validation.file(path, expected_contents);
+    }
+
+    fn remove_file(&mut self, path: &Path) {
+        self.general_validation.remove_file(path);
+    }
+
+    fn finish(self) {
+        let repo_files: HashSet<PathBuf> = WalkDir::new(&self.set_root)
+            .into_iter()
+            .map(|e| e.unwrap())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.into_path())
+            .filter(|p| !monja::is_monja_repo_file(p))
+            .collect();
+
+        expect_that!(repo_files, container_eq(self.general_validation.files));
+    }
+}
+
+struct GeneralValidation {
+    pub files: HashSet<PathBuf>,
+}
+impl GeneralValidation {
+    pub fn new(_: &Simulator) -> Self {
+        GeneralValidation {
+            files: HashSet::new(),
+        }
+    }
+}
+impl OperationHandler for GeneralValidation {
     fn dir(&mut self, path: &Path) {
         let dir = fs::read_dir(path);
         expect_that!(dir, ok(anything()));
@@ -164,18 +247,19 @@ impl OperationHandler for LocalValidation {
         panic!("Not possible to remove_file for validation.")
     }
 
-    fn finish(self) {
-        let local_files: HashSet<PathBuf> = WalkDir::new(&self.local_root)
-            .into_iter()
-            .map(|e| e.unwrap())
-            .filter(|e| e.file_type().is_file())
-            .map(|e| e.into_path())
-            .filter(|p| !monja::is_monja_local_file(p))
-            .filter(|p| !p.starts_with(&self.repo_root))
-            .collect();
+    fn finish(self) {}
+}
 
-        expect_that!(local_files, container_eq(self.files));
-    }
+pub(crate) fn set_names<S, N>(names: N) -> Vec<SetName>
+where
+    S: AsRef<str>,
+    N: AsRef<[S]>,
+{
+    names
+        .as_ref()
+        .iter()
+        .map(|n| SetName(n.as_ref().into()))
+        .collect()
 }
 
 // a previous version used lambda-based (nested) builders to do the same thing.
@@ -190,7 +274,23 @@ macro_rules! fs_operation {
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
             let path = $sim.profile().repo_root.as_ref().join($set);
-            let mut handler = $crate::sim::SetManipulation::new(&$sim);
+            let mut handler = $crate::sim::Manipulation::new(&$sim);
+            fs_operation!(@start (handler, path); ($($tokens)*));
+        }
+    };
+
+    (LocalManipulation, $sim:expr, $($tokens:tt)*) => {
+        {
+            let path = $sim.profile().local_root.into_path_buf();
+            let mut handler = $crate::sim::Manipulation::new(&$sim);
+            fs_operation!(@start (handler, path); ($($tokens)*));
+        }
+    };
+
+    (SetValidation, $sim:expr, $set:literal, $($tokens:tt)*) => {
+        {
+            let path = $sim.profile().repo_root.as_ref().join($set);
+            let mut handler = $crate::sim::SetValidation::new(&$sim, &path);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
     };

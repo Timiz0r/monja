@@ -1,6 +1,6 @@
 use googletest::prelude::*;
 
-use crate::sim::Simulator;
+use crate::sim::{Simulator, set_names};
 use monja::{
     AbsolutePath, MonjaProfile, MonjaProfileConfig, PullError, RepoStateInitializationError,
     SetConfig, SetName,
@@ -297,16 +297,4 @@ fn set_with_empty_name() -> Result<()> {
     );
 
     Ok(())
-}
-
-fn set_names<S, N>(names: N) -> Vec<SetName>
-where
-    S: AsRef<str>,
-    N: AsRef<[S]>,
-{
-    names
-        .as_ref()
-        .iter()
-        .map(|n| SetName(n.as_ref().into()))
-        .collect()
 }

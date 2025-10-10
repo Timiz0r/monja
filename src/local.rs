@@ -102,14 +102,22 @@ fn walk(root: &AbsolutePath) -> impl Iterator<Item = io::Result<FilePath>> {
     let walker = WalkBuilder::new(root.as_ref())
         .standard_filters(false)
         .add_custom_ignore_filename(".monjaignore")
-        .follow_links(true)
+        .follow_links(false)
+        .hidden(false)
         .build();
-    walker.flatten().map(|entry| {
-        Ok(FilePath(
-            RelativePathBuf::from_path(entry.path())
-                .expect("The walker shouldn't produce absolute paths."),
-        ))
-    })
+    walker
+        .flatten()
+        // note that WalkBuilder's filter will filter out directories from being walked, so we instead filter here
+        .filter(|e| e.path().is_file())
+        .map(|entry| {
+            let path = entry
+                .path()
+                .strip_prefix(root.as_ref())
+                .expect("Should naturally be a prefix.");
+            Ok(FilePath(
+                RelativePathBuf::from_path(path).expect("Generated a relative path."),
+            ))
+        })
 }
 
 #[derive(Serialize, Deserialize)]
