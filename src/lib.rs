@@ -264,10 +264,11 @@ pub struct PullSuccess {
 }
 
 pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
-    // the code ends up being the cleanest when files takes ownership of its data,
+    // the code ends up being the cleanest when files takes ownership of its data from repo,
     // since that data becomes part of the result.
-    // in order to take ownership, we .remove() them.
+    // in order to take ownership, we .remove() them (from sets).
     // if we instead used get(), we'd have to do a lot of cloning.
+    // the only problem is we partial move the set, so it's not like we can store it anywhere directly.
     // instead, we just move out the rest of the set info we need, at the cost of a small hashmap.
     struct SetInfo {
         root: AbsolutePath,

@@ -61,7 +61,7 @@ pub(crate) fn retrieve_state(
     let mut missing_sets = HashMap::with_capacity(repo.sets.len());
     let mut missing_files = HashMap::with_capacity(repo.sets.len());
 
-    for local_path in walk(&profile.local_root) {
+    for local_path in walk(profile) {
         let local_path = local_path?;
         let Some(set_name) = index.get(&local_path) else {
             untracked_files.push(local_path);
@@ -98,8 +98,10 @@ pub(crate) fn retrieve_state(
     })
 }
 
-fn walk(root: &AbsolutePath) -> impl Iterator<Item = io::Result<FilePath>> {
-    let walker = WalkBuilder::new(root.as_ref())
+fn walk(profile: &MonjaProfile) -> impl Iterator<Item = io::Result<FilePath>> {
+    let local_root = profile.local_root.as_ref();
+    let repo_root = profile.repo_root.as_ref();
+    let walker = WalkBuilder::new(local_root)
         .standard_filters(false)
         .add_custom_ignore_filename(".monjaignore")
         .follow_links(false)
@@ -109,10 +111,14 @@ fn walk(root: &AbsolutePath) -> impl Iterator<Item = io::Result<FilePath>> {
         .flatten()
         // note that WalkBuilder's filter will filter out directories from being walked, so we instead filter here
         .filter(|e| e.path().is_file())
-        .map(|entry| {
+        .filter(move |e| !e.path().starts_with(repo_root))
+        .filter(|e| !crate::is_monja_local_file(e.path()))
+        .map(move |entry| {
+            // would be convenient to map path out earlier, but that requires a clone
+            // because the path comes from a dropped Entry.
             let path = entry
                 .path()
-                .strip_prefix(root.as_ref())
+                .strip_prefix(local_root)
                 .expect("Should naturally be a prefix.");
             Ok(FilePath(
                 RelativePathBuf::from_path(path).expect("Generated a relative path."),
