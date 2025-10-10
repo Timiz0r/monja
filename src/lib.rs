@@ -381,8 +381,10 @@ fn rsync(source: &Path, dest: &Path, files: impl Iterator<Item = PathBuf>) -> st
             "-av".as_ref(),
             "--files-from=-".as_ref(),
             "--checksum".as_ref(),
+            "--mkpath".as_ref(),
             source.as_os_str(),
-            dest.as_os_str(),
+            // works with mkpath to ensure the dir is properly created if needed
+            dest.join("").as_os_str(),
         ])
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())

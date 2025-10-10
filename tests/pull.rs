@@ -7,9 +7,8 @@ use monja::{MonjaProfileConfig, SetConfig, SetName};
 #[macro_use]
 mod sim;
 
-// TODO: index verification
-// TODO: special files excluded
 // TODO: non-existing monjadir
+// TODO: monjadir in ~/; will probably just change temp folder locations to nest repo in local, since this would be typical
 
 #[gtest]
 fn simple_set() -> Result<()> {
@@ -116,32 +115,33 @@ fn shortcuts() -> Result<()> {
         ..old
     })
     .configure_set(SetName("set1".into()), |_| SetConfig {
-        shortcut: Some("".into()),
+        // start with nested directory structure just in case
+        shortcut: Some(".config/myconfig".into()),
     })
     .configure_set(SetName("set2".into()), |_| SetConfig {
         shortcut: Some(".config".into()),
     })
     .configure_set(SetName("set3".into()), |_| SetConfig {
-        shortcut: Some(".config/myconfig".into()),
+        shortcut: Some("".into()),
     });
 
     fs_operation! { SetManipulation, sim, "set1",
-        dir ".config"
-            dir "myconfig"
-                file "foo" "set1"
-            end
-            file "blueberry" "tart1"
-        end
+        file "baz" "set1"
+        file "bar" "set1"
     };
     fs_operation! { SetManipulation, sim, "set2",
         dir "myconfig"
-            file "bar" "set2"
+            file "foo" "set2"
         end
         file "blueberry" "tart2"
     };
     fs_operation! { SetManipulation, sim, "set3",
-        file "baz" "set3"
-        file "bar" "set3"
+        dir ".config"
+            dir "myconfig"
+                file "bar" "set3"
+            end
+            file "blueberry" "tart3"
+        end
     };
 
     let _pull_result = monja::pull(&sim.profile())?;
@@ -149,11 +149,11 @@ fn shortcuts() -> Result<()> {
     fs_operation! { LocalValidation, sim,
         dir ".config"
             dir "myconfig"
-                file "foo" "set1"
+                file "foo" "set2"
                 file "bar" "set3"
-                file "baz" "set3"
+                file "baz" "set1"
             end
-            file "blueberry" "tart2"
+            file "blueberry" "tart3"
         end
     };
 

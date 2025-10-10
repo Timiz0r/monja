@@ -10,12 +10,6 @@ use tempfile::TempDir;
 use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
 use walkdir::WalkDir;
 
-// the types here use mutability to indicate file system operations,
-// which is incidentally why we pass references to DirBuilder (sometimes mut), instead of value.
-// it's also why file operations require a mutable reference, even though nothing is actually mutated.
-//
-// granted, this is just a simulator, so it wouldnt be a big deal
-// if verification operations allowed file operations.
 pub(crate) struct Simulator {
     repo_dir: TempDir,
     local_dir: TempDir,
