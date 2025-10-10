@@ -1,11 +1,13 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    ffi::{OsStr, OsString},
     io::Write,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::LazyLock,
 };
 
 use relative_path::RelativePathBuf;
@@ -406,6 +408,30 @@ fn rsync(source: &Path, dest: &Path, files: impl Iterator<Item = PathBuf>) -> st
         true => Ok(()),
         false => Err(std::io::Error::other("Unsuccessful status code for rsync.")),
     }
+}
+
+// not actually sure this is the best way, but it probably works
+// and we can just test on windows if we ever support it
+static MONJA_REPO_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
+    HashSet::from([
+        OsString::from(".monja-set.toml"),
+        OsString::from(".monja-dir.toml"),
+    ])
+});
+static MONJA_LOCAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
+    HashSet::from([
+        OsString::from(".monja-profile.toml"),
+        OsString::from(".monja-index.toml"),
+        OsString::from(".monjaignore.toml"),
+    ])
+});
+pub fn is_monja_repo_file(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|f: &OsStr| MONJA_REPO_FILES.contains(f))
+}
+pub fn is_monja_local_file(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|f: &OsStr| MONJA_LOCAL_FILES.contains(f))
 }
 
 // want to keep local/repo::File internal, so gonna bite the bullet on allocating another vector.

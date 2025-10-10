@@ -134,7 +134,7 @@ pub(crate) fn initialize_full_state(
                     Err(initial) => errors.push(StateInitializationError::NonUtf8Path(initial)),
                 };
             }
-            _ => {} // dirs in particular
+            _ => {} // non-dirs
         };
     }
     let set_info = set_info;
@@ -158,7 +158,7 @@ pub(crate) fn initialize_full_state(
             for entry in WalkDir::new(&set_path) {
                 let entry = entry
                     .map_err(|e| StateInitializationError::DirectoryWalk(set_name.clone(), e))?;
-                if entry.file_type().is_file() {
+                if entry.file_type().is_file() && !crate::is_monja_repo_file(entry.path()) {
                     let path_in_set = entry
                         .path()
                         .strip_prefix(&set_path)

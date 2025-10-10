@@ -1,9 +1,14 @@
-use std::{fs, path::Path};
+use std::{
+    collections::HashSet,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use googletest::prelude::*;
 use tempfile::TempDir;
 
 use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
+use walkdir::WalkDir;
 
 // the types here use mutability to indicate file system operations,
 // which is incidentally why we pass references to DirBuilder (sometimes mut), instead of value.
@@ -101,7 +106,7 @@ pub(crate) trait OperationHandler {
     fn file(&mut self, path: &Path, contents: &str);
     fn remove_file(&mut self, path: &Path);
 
-    fn finish(&self);
+    fn finish(self);
 }
 
 pub(crate) struct SetManipulation;
@@ -127,13 +132,19 @@ impl OperationHandler for SetManipulation {
         fs::remove_file(path).unwrap();
     }
 
-    fn finish(&self) {}
+    fn finish(self) {}
 }
 
-pub(crate) struct LocalValidation {}
+pub(crate) struct LocalValidation {
+    root: PathBuf,
+    files: HashSet<PathBuf>,
+}
 impl LocalValidation {
-    pub(crate) fn new(_: &Simulator) -> Self {
-        LocalValidation {}
+    pub fn new(sim: &Simulator) -> Self {
+        LocalValidation {
+            root: sim.local_dir.path().to_path_buf(),
+            files: HashSet::new(),
+        }
     }
 }
 impl OperationHandler for LocalValidation {
@@ -149,13 +160,25 @@ impl OperationHandler for LocalValidation {
     fn file(&mut self, path: &Path, expected_contents: &str) {
         let contents = fs::read_to_string(path).unwrap();
         expect_that!(contents, eq(expected_contents));
+
+        expect_that!(self.files.insert(path.to_path_buf()), is_true());
     }
 
     fn remove_file(&mut self, _path: &Path) {
         panic!("Not possible to remove_file for validation.")
     }
 
-    fn finish(&self) {}
+    fn finish(self) {
+        let local_files: HashSet<PathBuf> = WalkDir::new(&self.root)
+            .into_iter()
+            .map(|e| e.unwrap())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.into_path())
+            .filter(|p| !monja::is_monja_local_file(p))
+            .collect();
+
+        expect_that!(local_files, container_eq(self.files));
+    }
 }
 
 // a previous version used lambda-based (nested) builders to do the same thing.
@@ -170,7 +193,7 @@ macro_rules! fs_operation {
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
             let path = $sim.profile().repo_root.as_ref().join($set);
-            let mut handler = SetManipulation::new(&$sim);
+            let mut handler = $crate::sim::SetManipulation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
     };
@@ -178,7 +201,7 @@ macro_rules! fs_operation {
     (LocalValidation, $sim:expr, $($tokens:tt)*) => {
         {
             let path = $sim.profile().local_root.into_path_buf();
-            let mut handler = LocalValidation::new(&$sim);
+            let mut handler = $crate::sim::LocalValidation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
     };
@@ -186,7 +209,7 @@ macro_rules! fs_operation {
     (@start ($handler:ident, $path_var:ident); $tokens:tt) => {
         $crate::sim::OperationHandler::dir(&mut $handler, &$path_var);
         fs_operation!(@general ($handler, $path_var); $tokens);
-        $crate::sim::OperationHandler::finish(&$handler);
+        $crate::sim::OperationHandler::finish($handler);
     };
 
     (@general ($handler:ident, $path_var:ident); (file $path:literal $contents:literal $($tail:tt)*)) => {
@@ -276,3 +299,21 @@ macro_rules! fs_operation {
         fs_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
     };
 }
+
+// a trimmed down version of what's in monja::local.
+// we don't use that because it's considered an internal implementation detail.
+// but because it's useful to validate, we're doing this
+// TODO: or maybe not! the push tests theoretically will take care of this, after all.
+// TODO: to validate that relative paths are being used, one interesting way is to move the folder and see if it still works
+// #[derive(serde::Serialize, serde::Deserialize)]
+// struct FileIndex {
+//     #[serde(flatten)]
+//     pub set_mapping: HashMap<PathBuf, String>,
+// }
+// impl FileIndex {
+//     fn load(root: &AbsolutePath) -> anyhow::Result<FileIndex> {
+//         let index = std::fs::read(root.as_ref().join(".monja-index.toml"))?;
+
+//         toml::from_slice(&index).map_err(|e| e.into())
+//     }
+// }

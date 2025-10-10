@@ -91,6 +91,8 @@ TODO: this will come a bit later after we've implemented better push and cleanup
             * maybe a quickpull that  does no clean?
         * tbd: clean by comparing indices or clean with full scan?
             * probably both. two modes for pull, and only scan for clean command.
+            * so one mode will basically be a dif between the old index and new index, where we can clean anything that was in old but not in new
+            * and the other mode checks disk.
     * since will be run under the assumption all files have right owner and group, also need a mode that can be invoked under sudo (explicit or implicit?) to force ownership
         * will failfast instead of partial syncing
         * will support a way to skip
