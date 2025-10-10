@@ -7,7 +7,9 @@ use std::{
 use googletest::prelude::*;
 use tempfile::TempDir;
 
-use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
+use monja::{
+    AbsolutePath, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError, SetConfig, SetName,
+};
 use walkdir::WalkDir;
 
 pub(crate) struct Simulator {
@@ -49,7 +51,7 @@ impl Simulator {
         }
     }
 
-    pub(crate) fn profile(&self) -> MonjaProfile {
+    pub(crate) fn profile(&self) -> std::result::Result<MonjaProfile, MonjaProfileConfigError> {
         // we previously stored an instance of the profile
         // however, we changed it to reading a file to get coverage of the code paths
         let local_root = AbsolutePath::for_existing_path(self.local_dir.path()).unwrap();
@@ -57,7 +59,6 @@ impl Simulator {
         MonjaProfileConfig::load(&self.profile_path)
             .unwrap()
             .into_config(local_root)
-            .unwrap()
     }
 
     // pass by value to move old profile
@@ -65,7 +66,7 @@ impl Simulator {
     where
         P: FnMut(MonjaProfileConfig) -> MonjaProfileConfig,
     {
-        let profile_config = config(self.profile().config);
+        let profile_config = config(self.profile().unwrap().config);
         profile_config.save(&self.profile_path).unwrap();
 
         self
@@ -75,7 +76,7 @@ impl Simulator {
     where
         P: FnMut(SetConfig) -> SetConfig,
     {
-        let profile = self.profile();
+        let profile = self.profile().unwrap();
         let set_config = SetConfig::load(&profile, &set_name).unwrap();
         let set_config = config(set_config);
 
@@ -273,7 +274,7 @@ macro_rules! fs_operation {
     // so putting it at the top to stand out more
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().repo_root.as_ref().join($set);
+            let path = $sim.profile().unwrap().repo_root.as_ref().join($set);
             let mut handler = $crate::sim::Manipulation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
@@ -281,7 +282,7 @@ macro_rules! fs_operation {
 
     (LocalManipulation, $sim:expr, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().local_root.into_path_buf();
+            let path = $sim.profile().unwrap().local_root.into_path_buf();
             let mut handler = $crate::sim::Manipulation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
@@ -289,7 +290,7 @@ macro_rules! fs_operation {
 
     (SetValidation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().repo_root.as_ref().join($set);
+            let path = $sim.profile().unwrap().repo_root.as_ref().join($set);
             let mut handler = $crate::sim::SetValidation::new(&$sim, &path);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
@@ -297,7 +298,7 @@ macro_rules! fs_operation {
 
     (LocalValidation, $sim:expr, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().local_root.into_path_buf();
+            let path = $sim.profile().unwrap().local_root.into_path_buf();
             let mut handler = $crate::sim::LocalValidation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }

@@ -133,7 +133,14 @@ pub(crate) struct FileIndex {
 }
 impl FileIndex {
     fn load(root: &AbsolutePath) -> Result<FileIndex, FileIndexError> {
-        let index = std::fs::read(root.as_ref().join(".monja-index.toml"))?;
+        let index_path = root.as_ref().join(".monja-index.toml");
+        if !index_path.exists() {
+            return Ok(FileIndex {
+                set_mapping: HashMap::new(),
+            });
+        }
+
+        let index = std::fs::read(index_path)?;
 
         toml::from_slice(&index).map_err(|e| e.into())
     }

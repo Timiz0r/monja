@@ -31,7 +31,7 @@ fn simple_set() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile())?;
+    let _pull_result = monja::pull(&sim.profile()?)?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -74,7 +74,7 @@ fn multiple_sets() -> Result<()> {
         file "set2only" "set2only"
     };
 
-    let _pull_result = monja::pull(&sim.profile())?;
+    let _pull_result = monja::pull(&sim.profile()?)?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -92,7 +92,7 @@ fn multiple_sets() -> Result<()> {
         ..old
     });
 
-    let _pull_result = monja::pull(&sim.profile())?;
+    let _pull_result = monja::pull(&sim.profile()?)?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -144,7 +144,7 @@ fn shortcuts() -> Result<()> {
         end
     };
 
-    let _pull_result = monja::pull(&sim.profile())?;
+    let _pull_result = monja::pull(&sim.profile()?)?;
 
     fs_operation! { LocalValidation, sim,
         dir ".config"
@@ -175,7 +175,7 @@ fn shorcut_directory_traversal() -> Result<()> {
         file "foo" "set1"
     };
 
-    let result = monja::pull(&sim.profile());
+    let result = monja::pull(&sim.profile()?);
     let specific_error = contains(pat!(RepoStateInitializationError::SetShortcutInvalid(
         pat!(monja::SetShortcutError::TraversalToParent(..))
     )));
@@ -201,7 +201,7 @@ fn shorcut_absolute_path() -> Result<()> {
         file "foo" "set1"
     };
 
-    let result = monja::pull(&sim.profile());
+    let result = monja::pull(&sim.profile()?);
     let specific_error = contains(pat!(RepoStateInitializationError::SetShortcutInvalid(
         pat!(monja::SetShortcutError::NotRelative(..))
     )));
@@ -228,7 +228,7 @@ fn missing_set() -> Result<()> {
         end
         file "set1only" "set1only"
     };
-    let result = monja::pull(&sim.profile());
+    let result = monja::pull(&sim.profile()?);
     expect_that!(
         result,
         err(pat!(PullError::MissingSets(contains(eq(&SetName(
@@ -266,7 +266,7 @@ fn missing_repo_folder() -> Result<()> {
 
     let profile = MonjaProfile {
         repo_root,
-        ..sim.profile()
+        ..sim.profile()?
     };
     let result = monja::pull(&profile);
     let specific_error = contains(pat!(RepoStateInitializationError::Io(..)));
@@ -290,7 +290,7 @@ fn set_with_empty_name() -> Result<()> {
         file "foo" "set1"
     };
 
-    let result = monja::pull(&sim.profile());
+    let result = monja::pull(&sim.profile()?);
     expect_that!(
         result,
         err(pat!(PullError::MissingSets(container_eq(set_names([""])))))

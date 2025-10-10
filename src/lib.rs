@@ -27,6 +27,7 @@ pub use repo::SetShortcutError;
 pub(crate) mod local;
 pub(crate) mod repo;
 
+#[derive(Debug)]
 pub struct AbsolutePath {
     path: PathBuf,
 }
@@ -75,7 +76,7 @@ impl From<repo::FilePath> for RepoFilePath {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MonjaProfileConfig {
     pub monja_dir: PathBuf,
@@ -120,6 +121,7 @@ pub enum MonjaProfileConfigError {
     Io(#[from] std::io::Error),
 }
 
+#[derive(Debug)]
 pub struct MonjaProfile {
     pub local_root: AbsolutePath,
     pub repo_root: AbsolutePath,
@@ -141,9 +143,9 @@ pub enum PushError {
     #[error("Failed to copy files via rsync.")]
     Rsync(#[source] std::io::Error),
 }
-
+#[derive(Debug)]
 pub struct PushSuccess {
-    pub files_to_push: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub files_pushed: Vec<(repo::SetName, Vec<LocalFilePath>)>,
 }
 
 pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
@@ -242,7 +244,9 @@ pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
         local_state.files_to_push.len(),
         local_state.files_to_push.into_iter(),
     );
-    Ok(PushSuccess { files_to_push })
+    Ok(PushSuccess {
+        files_pushed: files_to_push,
+    })
 }
 
 #[derive(Error, Debug)]
