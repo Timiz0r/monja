@@ -1,14 +1,14 @@
 use googletest::prelude::*;
 
 use crate::sim::Simulator;
-use monja::{MonjaProfileConfig, SetConfig, SetName};
+use monja::{
+    AbsolutePath, MonjaProfile, MonjaProfileConfig, PullError, RepoStateInitializationError,
+    SetConfig, SetName,
+};
 
 #[allow(dead_code)]
 #[macro_use]
 mod sim;
-
-// TODO: non-existing monjadir
-// TODO: monjadir in ~/; will probably just change temp folder locations to nest repo in local, since this would be typical
 
 #[gtest]
 fn simple_set() -> Result<()> {
@@ -161,16 +161,143 @@ fn shortcuts() -> Result<()> {
 }
 
 #[gtest]
-fn directory_traversal() {}
+fn shorcut_directory_traversal() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    })
+    .configure_set(SetName("set1".into()), |_| SetConfig {
+        shortcut: Some("..".into()),
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        file "foo" "set1"
+    };
+
+    let result = monja::pull(&sim.profile());
+    let specific_error = contains(pat!(RepoStateInitializationError::SetShortcutInvalid(
+        pat!(monja::SetShortcutError::TraversalToParent(..))
+    )));
+    expect_that!(
+        result,
+        err(pat!(PullError::RepoStateInitialization(specific_error)))
+    );
+    Ok(())
+}
 
 #[gtest]
-fn missing_set() {}
+fn shorcut_absolute_path() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    })
+    .configure_set(SetName("set1".into()), |_| SetConfig {
+        shortcut: Some("/".into()),
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        file "foo" "set1"
+    };
+
+    let result = monja::pull(&sim.profile());
+    let specific_error = contains(pat!(RepoStateInitializationError::SetShortcutInvalid(
+        pat!(monja::SetShortcutError::NotRelative(..))
+    )));
+    expect_that!(
+        result,
+        err(pat!(PullError::RepoStateInitialization(specific_error)))
+    );
+    Ok(())
+}
 
 #[gtest]
-fn missing_local_folder() {}
+fn missing_set() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1", "set2"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "foo"
+            dir "bar"
+                file "baz" "set1baz"
+            end
+        end
+        file "set1only" "set1only"
+    };
+    let result = monja::pull(&sim.profile());
+    expect_that!(
+        result,
+        err(pat!(PullError::MissingSets(contains(eq(&SetName(
+            "set2".into()
+        ))))))
+    );
+
+    Ok(())
+}
+
+// #[gtest]
+// fn missing_local_folder() -> Result<()> {
+//     // this test case realistically does not exist.
+//     // first, the home folder should exist.
+//     // second, if it doesnt or the profile doesn't exist, the main function will fail, not monja::push.
+//     Ok(())
+// }
 
 #[gtest]
-fn missing_repo_folder() {}
+fn missing_repo_folder() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    let repo_root;
+    {
+        let new_root = tempfile::Builder::new()
+            .prefix("NonExistingMonjaRepo")
+            .tempdir()?;
+        repo_root = AbsolutePath::for_existing_path(new_root.path())?;
+        // drop tempdir, which deletes it. gotta go thru hoops because AbsolutePath::for_existing_path
+    }
+
+    let profile = MonjaProfile {
+        repo_root,
+        ..sim.profile()
+    };
+    let result = monja::pull(&profile);
+    let specific_error = contains(pat!(RepoStateInitializationError::Io(..)));
+    expect_that!(
+        result,
+        err(pat!(PullError::RepoStateInitialization(specific_error)))
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn set_with_empty_name() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["", "set1"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        file "foo" "set1"
+    };
+
+    let result = monja::pull(&sim.profile());
+    expect_that!(
+        result,
+        err(pat!(PullError::MissingSets(container_eq(set_names([""])))))
+    );
+
+    Ok(())
+}
 
 fn set_names<S, N>(names: N) -> Vec<SetName>
 where

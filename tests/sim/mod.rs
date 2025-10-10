@@ -18,13 +18,13 @@ pub(crate) struct Simulator {
 
 impl Simulator {
     pub(crate) fn create() -> Self {
-        let repo_dir = tempfile::Builder::new()
-            .prefix("MonjaRepo")
-            .tempdir()
-            .unwrap();
         let local_dir = tempfile::Builder::new()
             .prefix("MonjaLocal")
             .tempdir()
+            .unwrap();
+        let repo_dir = tempfile::Builder::new()
+            .prefix("MonjaRepo")
+            .tempdir_in(&local_dir)
             .unwrap();
 
         let profile_config = MonjaProfileConfig {
@@ -130,13 +130,15 @@ impl OperationHandler for SetManipulation {
 }
 
 pub(crate) struct LocalValidation {
-    root: PathBuf,
+    local_root: PathBuf,
+    repo_root: PathBuf,
     files: HashSet<PathBuf>,
 }
 impl LocalValidation {
     pub fn new(sim: &Simulator) -> Self {
         LocalValidation {
-            root: sim.local_dir.path().to_path_buf(),
+            local_root: sim.local_dir.path().to_path_buf(),
+            repo_root: sim.repo_dir.path().to_path_buf(),
             files: HashSet::new(),
         }
     }
@@ -163,12 +165,13 @@ impl OperationHandler for LocalValidation {
     }
 
     fn finish(self) {
-        let local_files: HashSet<PathBuf> = WalkDir::new(&self.root)
+        let local_files: HashSet<PathBuf> = WalkDir::new(&self.local_root)
             .into_iter()
             .map(|e| e.unwrap())
             .filter(|e| e.file_type().is_file())
             .map(|e| e.into_path())
             .filter(|p| !monja::is_monja_local_file(p))
+            .filter(|p| !p.starts_with(&self.repo_root))
             .collect();
 
         expect_that!(local_files, container_eq(self.files));

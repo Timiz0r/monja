@@ -10,12 +10,19 @@ use std::{
     sync::LazyLock,
 };
 
-use relative_path::RelativePathBuf;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use repo::SetConfig;
 pub use repo::SetName;
+use repo::SetShortcut;
+
+pub type LocalStateInitializationError = local::StateInitializationError;
+//file index error is internal implementation detail
+
+pub use repo::SetConfigError;
+pub type RepoStateInitializationError = repo::StateInitializationError;
+pub use repo::SetShortcutError;
 
 pub(crate) mod local;
 pub(crate) mod repo;
@@ -247,9 +254,11 @@ pub enum PullError {
     #[error("Failed to copy files via rsync.")]
     Rsync(#[source] std::io::Error),
     #[error("Unable to read .monja-index.toml.")]
-    FileIndex(#[from] local::FileIndexError),
+    // data structure is internal implementation detail, so just go with this.
+    FileIndex,
 }
 
+#[derive(Debug)]
 pub struct PullSuccess {
     pub files_to_pull: Vec<(SetName, Vec<RepoFilePath>)>,
 }
@@ -262,7 +271,7 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
     // instead, we just move out the rest of the set info we need, at the cost of a small hashmap.
     struct SetInfo {
         root: AbsolutePath,
-        shortcut: RelativePathBuf,
+        shortcut: SetShortcut,
     }
     let mut set_info = HashMap::with_capacity(profile.config.target_sets.len());
 
@@ -352,6 +361,7 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
         // transfer looks something like this: /monja/set/baz -> /home/xx/foo/bar/baz
         // here, the source is /monja/set/, dest is /home/xx/foo/bar/, and file is baz
         // incidentally, local::FilePath is foo/bar/baz
+
         rsync(
             set.root.as_ref(),
             &set.shortcut.to_path(profile.local_root.as_ref()),
@@ -361,7 +371,9 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
     }
 
     let index = local::FileIndex::new(index_files);
-    index.save(&profile.local_root)?;
+    index
+        .save(&profile.local_root)
+        .map_err(|_| PullError::FileIndex)?;
 
     let files_to_pull = convert_path_result(files_to_pull.len(), files_to_pull.into_iter());
     Ok(PullSuccess { files_to_pull })

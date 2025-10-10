@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
+use std::{collections::HashMap, fmt::Display, fs, ops::Deref, path::PathBuf};
 
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
@@ -69,10 +69,48 @@ pub enum SetConfigError {
     Save(SetName, #[source] std::io::Error),
 }
 
+#[derive(Debug)]
+pub(crate) struct SetShortcut(RelativePathBuf);
+impl SetShortcut {
+    pub fn from_path(path: PathBuf) -> Result<Self, SetShortcutError> {
+        let rel = RelativePathBuf::from_path(&path)
+            .map_err(|e| SetShortcutError::NotRelative(path.clone(), e))?;
+
+        let traversal_detection = rel.to_logical_path(".");
+        if traversal_detection.as_path().as_os_str().is_empty() && !path.as_os_str().is_empty() {
+            return Err(SetShortcutError::TraversalToParent(path));
+        }
+
+        Ok(SetShortcut(rel))
+    }
+}
+impl<T> AsRef<T> for SetShortcut
+where
+    T: ?Sized,
+    <Self as Deref>::Target: AsRef<T>,
+{
+    fn as_ref(&self) -> &T {
+        self.deref().as_ref()
+    }
+}
+impl Deref for SetShortcut {
+    type Target = RelativePath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+#[derive(Error, Debug)]
+pub enum SetShortcutError {
+    #[error("Shortcut does not appear to be a relative path: {0}")]
+    NotRelative(PathBuf, #[source] relative_path::FromPathError),
+    #[error("Shortcut appears to be trying to traverse above the profile directory: {0}")]
+    TraversalToParent(PathBuf),
+}
+
 pub(crate) struct Set {
     pub _name: SetName,
-    // TODO: validate and test that this is a child of the local root, to avoid directory traversal attacks
-    pub shortcut: RelativePathBuf,
+    pub shortcut: SetShortcut,
     pub root: AbsolutePath,
     // directories: HashMap<ObjectPath, Directory>,
     pub locally_mapped_files: HashMap<local::FilePath, File>,
@@ -146,8 +184,7 @@ pub(crate) fn initialize_full_state(
             let set_config = SetConfig::load(profile, &set_name)?;
 
             let shortcut = set_config.shortcut.unwrap_or("".into());
-            let shortcut = RelativePathBuf::from_path(&shortcut)
-                .map_err(|e| StateInitializationError::InvalidShortcut(shortcut, e))?;
+            let shortcut = SetShortcut::from_path(shortcut)?;
 
             // TODO: get rid of these .0s. don't want  asref deref tho
             let root =
@@ -203,6 +240,8 @@ pub enum StateInitializationError {
     Io(#[from] std::io::Error),
     #[error("Unable to convert dir name into set name: {0:?}")]
     NonUtf8Path(std::ffi::OsString),
+    #[error("Set shortcut is invalid.")]
+    SetShortcutInvalid(#[from] SetShortcutError),
     #[error("Error in walking directory for set '{0}'.")]
     DirectoryWalk(SetName, #[source] walkdir::Error),
     #[error("Unable to load set config.")]
