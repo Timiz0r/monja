@@ -8,6 +8,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+use relative_path::RelativePathBuf;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -252,6 +253,17 @@ pub struct PullSuccess {
 }
 
 pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
+    // the code ends up being the cleanest when files takes ownership of its data,
+    // since that data becomes part of the result.
+    // in order to take ownership, we .remove() them.
+    // if we instead used get(), we'd have to do a lot of cloning.
+    // instead, we just move out the rest of the set info we need, at the cost of a small hashmap.
+    struct SetInfo {
+        root: AbsolutePath,
+        shortcut: RelativePathBuf,
+    }
+    let mut set_info = HashMap::with_capacity(profile.config.target_sets.len());
+
     let mut repo =
         repo::initialize_full_state(profile).map_err(PullError::RepoStateInitialization)?;
     // we first need a map on local path in order to pick the set associated with the file.
@@ -270,18 +282,24 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
             continue;
         }
 
-        for (local_path, local_file) in repo
+        let set = repo
             .sets
             .remove(set_name)
-            .expect("We verified it existed where we aggregate missing sets.")
-            .locally_mapped_files
-            .into_iter()
-        {
+            .expect("We verified it existed where we aggregate missing sets.");
+        set_info.insert(
+            set_name,
+            SetInfo {
+                root: set.root,
+                shortcut: set.shortcut,
+            },
+        );
+
+        for (local_path, local_file) in set.locally_mapped_files.into_iter() {
             files.insert(local_path, local_file);
         }
     }
     // since we removed from the sets to get ownership of them, we want to move sets to ensure it doesn't get used.
-    //let _x = repo.sets;
+    let _x = repo.sets;
 
     if !missing_sets.is_empty() {
         return Err(PullError::MissingSets(missing_sets));
@@ -293,7 +311,7 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
         // return;
     }
 
-    let mut files_to_pull = HashMap::with_capacity(repo.sets.len());
+    let mut files_to_pull = HashMap::with_capacity(set_info.len());
     let mut index_files = HashMap::with_capacity(files.len());
     for (local_path, repo_file) in files.into_iter() {
         files_to_pull
@@ -317,8 +335,7 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
     }
 
     for (set_name, file_paths) in files_to_pull.iter() {
-        let set = repo
-            .sets
+        let set = set_info
             .get(set_name)
             .expect("Already checked for missing sets.");
 
