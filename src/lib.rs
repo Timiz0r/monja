@@ -299,7 +299,7 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
         }
     }
     // since we removed from the sets to get ownership of them, we want to move sets to ensure it doesn't get used.
-    let _x = repo.sets;
+    std::mem::drop(repo.sets);
 
     if !missing_sets.is_empty() {
         return Err(PullError::MissingSets(missing_sets));
@@ -323,7 +323,11 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
     }
 
     println!("Files to be pulled, as grouped under their corresponding sets:");
-    for (set_name, file_paths) in files_to_pull.iter() {
+    for set_name in profile.config.target_sets.iter() {
+        let file_paths = files_to_pull
+            .get(set_name)
+            .expect("Already checked for missing sets.");
+
         eprintln!("\tSet: {}", set_name);
         for path in file_paths {
             eprintln!(
@@ -334,8 +338,11 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
         }
     }
 
-    for (set_name, file_paths) in files_to_pull.iter() {
+    for set_name in profile.config.target_sets.iter() {
         let set = set_info
+            .get(set_name)
+            .expect("Already checked for missing sets.");
+        let file_paths = files_to_pull
             .get(set_name)
             .expect("Already checked for missing sets.");
 
