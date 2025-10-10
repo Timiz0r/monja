@@ -1,6 +1,8 @@
-use clap::{Args, Parser, Subcommand, command};
-
+// #![deny(exported_private_dependencies)]
+#![deny(clippy::unwrap_used)]
 use monja::{AbsolutePath, MonjaProfile};
+
+use clap::{Args, Parser, Subcommand, command};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -22,7 +24,7 @@ enum Commands {
 
 // TODO: macro?
 impl Commands {
-    fn execute(self, profile: MonjaProfile) {
+    fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
         match self {
             Commands::Push(push_command) => push_command.execute(profile),
             Commands::Pull(pull_command) => pull_command.execute(profile),
@@ -39,15 +41,16 @@ impl Commands {
 #[derive(Args)]
 struct PushCommand {}
 impl PushCommand {
-    fn execute(self, profile: MonjaProfile) {
-        monja::push(&profile);
+    fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
+        let _result = monja::push(&profile)?;
+        Ok(())
     }
 }
 
 #[derive(Args)]
 struct PullCommand {}
 impl PullCommand {
-    fn execute(self, profile: MonjaProfile) {
+    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -55,7 +58,7 @@ impl PullCommand {
 #[derive(Args)]
 struct InitCommand {}
 impl InitCommand {
-    fn execute(self, profile: MonjaProfile) {
+    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -63,7 +66,7 @@ impl InitCommand {
 #[derive(Args)]
 struct LocalStatusCommand {}
 impl LocalStatusCommand {
-    fn execute(self, profile: MonjaProfile) {
+    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -71,22 +74,22 @@ impl LocalStatusCommand {
 #[derive(Args)]
 struct ChangeProfileCommand {}
 impl ChangeProfileCommand {
-    fn execute(self, profile: MonjaProfile) {
+    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
         todo!()
     }
 }
 
 // TODO: some things named root should probably be base?
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let mut profile_path =
         std::env::home_dir().expect("We got bigger problems if there's no home.");
-    let local_root = AbsolutePath::from_path(&profile_path).unwrap();
+    let local_root = AbsolutePath::for_existing_path(&profile_path)?;
     profile_path.push(".monja-profile.toml");
-    let profile_path = AbsolutePath::from_path(&profile_path).unwrap();
+    let profile_path = AbsolutePath::for_existing_path(&profile_path)?;
 
-    let profile = monja::MonjaProfileConfig::load(&profile_path).into_config(local_root);
+    let profile = monja::MonjaProfileConfig::load(&profile_path)?.into_config(local_root)?;
 
     let cli = Cli::parse();
-    cli.command.execute(profile);
+    cli.command.execute(profile)
 }

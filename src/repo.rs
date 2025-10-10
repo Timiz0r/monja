@@ -1,19 +1,11 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    fs,
-    path::PathBuf,
-};
+use std::{collections::HashMap, fmt::Display, fs, path::PathBuf};
 
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use walkdir::WalkDir;
 
-use crate::{AbsolutePath, local};
-
-pub(crate) struct Repo {
-    sets: HashMap<SetName, Set>,
-}
+use crate::{AbsolutePath, MonjaProfile, local};
 
 // TODO: might as well deref to str and add a from
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -24,27 +16,8 @@ impl Display for SetName {
     }
 }
 
-impl Repo {
-    pub(crate) fn select_sets_mut<'a, T>(&mut self, sets: T) -> Vec<&mut Set>
-    where
-        T: Iterator<Item = &'a SetName>,
-    {
-        let sets: HashSet<&SetName> = HashSet::from_iter(sets);
-        self.sets
-            .iter_mut()
-            .filter(|(name, _)| sets.contains(name))
-            .map(|(_, set)| set)
-            .collect::<Vec<&mut Set>>()
-        // self.sets.iter_mut().map(|)
-    }
-
-    pub(crate) fn get_set(&self, set_name: &SetName) -> Option<&Set> {
-        self.sets.get(set_name)
-    }
-
-    pub(crate) fn set_count(&self) -> usize {
-        self.sets.len()
-    }
+pub(crate) struct RepoState {
+    pub sets: HashMap<SetName, Set>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -56,55 +29,63 @@ pub struct SetConfig {
 }
 
 impl SetConfig {
-    pub fn load(profile: &crate::MonjaProfile, set_name: &SetName) -> SetConfig {
-        let config_path = profile.repo_root.join(&set_name.0).join(".monja-set.toml");
+    pub fn load(
+        profile: &crate::MonjaProfile,
+        set_name: &SetName,
+    ) -> Result<SetConfig, SetConfigError> {
+        let config_path = profile
+            .repo_root
+            .as_ref()
+            .join(&set_name.0)
+            .join(".monja-set.toml");
         let config = fs::read(config_path).unwrap_or_default();
 
-        toml::from_slice(&config).unwrap()
+        toml::from_slice(&config).map_err(|e| SetConfigError::Deserialization(set_name.clone(), e))
     }
 
-    pub fn save(&self, profile: &crate::MonjaProfile, set_name: &SetName) {
-        let set_dir = profile.repo_root.join(&set_name.0);
-        fs::create_dir_all(&set_dir).unwrap();
+    pub fn save(
+        &self,
+        profile: &crate::MonjaProfile,
+        set_name: &SetName,
+    ) -> Result<(), SetConfigError> {
+        let set_dir = profile.repo_root.as_ref().join(&set_name.0);
+        fs::create_dir_all(&set_dir).map_err(|e| SetConfigError::Save(set_name.clone(), e))?;
 
         let config_path = set_dir.join(".monja-set.toml");
-        fs::write(config_path, toml::to_string(&self).unwrap()).unwrap();
+        let config = toml::to_string(&self)
+            .map_err(|e| SetConfigError::Serialization(set_name.clone(), e))?;
+
+        fs::write(config_path, config).map_err(|e| SetConfigError::Save(set_name.clone(), e))
     }
+}
+
+#[derive(Error, Debug)]
+pub enum SetConfigError {
+    #[error("Unable to deserialize .monja-set.toml for set '{0}'.")]
+    Deserialization(SetName, #[source] toml::de::Error),
+    #[error("Unable to serialize .monja-set.toml for set '{0}'.")]
+    Serialization(SetName, #[source] toml::ser::Error),
+    #[error("Unable to save .monja-set.toml for set '{0}'.")]
+    Save(SetName, #[source] std::io::Error),
 }
 
 pub(crate) struct Set {
-    name: SetName,
+    pub _name: SetName,
     // TODO: validate and test that this is a child of the local root, to avoid directory traversal attacks
-    shortcut: RelativePathBuf,
-    root: AbsolutePath,
+    pub shortcut: RelativePathBuf,
+    pub root: AbsolutePath,
     // directories: HashMap<ObjectPath, Directory>,
-    locally_mapped_files: HashMap<local::FilePath, File>,
+    pub locally_mapped_files: HashMap<local::FilePath, File>,
 }
 impl Set {
-    pub(crate) fn name(&self) -> &SetName {
-        &self.name
-    }
-
     pub(crate) fn tracks_file(&self, local_file: &local::FilePath) -> bool {
         self.locally_mapped_files.contains_key(local_file)
-    }
-
-    pub(crate) fn root(&self) -> &AbsolutePath {
-        &self.root
-    }
-
-    pub(crate) fn shortcut(&self) -> &RelativePath {
-        &self.shortcut
-    }
-
-    pub(crate) fn files(&self) -> impl Iterator<Item = &File> {
-        self.locally_mapped_files.values()
     }
 }
 
 pub(crate) struct FilePath {
-    path_in_set: RelativePathBuf,
-    local_path: local::FilePath,
+    pub path_in_set: RelativePathBuf,
+    pub local_path: local::FilePath,
 }
 
 impl FilePath {
@@ -119,15 +100,6 @@ impl FilePath {
             local_path,
         }
     }
-
-    // choosing to encapsulate since we have strict logic for instantiation
-    pub(crate) fn path_in_set(&self) -> &RelativePathBuf {
-        &self.path_in_set
-    }
-
-    pub(crate) fn local_path(&self) -> &local::FilePath {
-        &self.local_path
-    }
 }
 
 // TODO: am expecting this design to become necessary, though it isnt right now
@@ -139,57 +111,54 @@ pub(crate) struct File {
 }
 impl File {}
 
-pub(crate) struct Directory {}
-impl Directory {}
+pub(crate) struct _Directory {}
+impl _Directory {}
 
-pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo> {
-    let read_dir = fs::read_dir(root)?;
-    let mut set_info = vec![];
-    let mut errors = vec![];
+pub(crate) fn initialize_full_state(
+    profile: &MonjaProfile,
+) -> Result<RepoState, Vec<StateInitializationError>> {
+    // while we'll prefer to collect errors into a vector, there's no point in continuing if we can't read this dir.
+    let read_dir = fs::read_dir(profile.repo_root.as_ref())
+        .map_err(|e| vec![StateInitializationError::Io(e)])?;
 
-    // versus ::partition, less vector allocations, since we can unwrap results here
+    let mut set_info = Vec::new();
+    let mut errors = Vec::new();
+
+    // versus ::partition, less vector allocations, since we would need a second pass+vector on read_dir Ok()s
     for result in read_dir {
         match result {
-            Err(err) => errors.push(err),
+            Err(err) => errors.push(err.into()),
             Ok(res) if res.path().is_dir() => {
-                match res.file_name().to_str() {
-                    Some(str) => set_info.push((SetName(str.to_string()), res.path())),
-                    // this is so unlikely to happen that a static error is sufficient
-                    None => errors.push(std::io::Error::other(
-                        "Unable to convert dir name into set name.",
-                    )),
+                match res.file_name().into_string() {
+                    Ok(str) => set_info.push((SetName(str), res.path())),
+                    Err(initial) => errors.push(StateInitializationError::NonUtf8Path(initial)),
                 };
             }
-            _ => {}
+            _ => {} // dirs in particular
         };
     }
     let set_info = set_info;
-    let errors = errors;
-
-    if !errors.is_empty() {
-        // TODO: when we're doing custom errors, use all collected errors
-        return Err(errors
-            .into_iter()
-            .next()
-            .expect("Already checked that the errors vector isn't empty"));
-    }
 
     let mut sets = HashMap::with_capacity(set_info.len());
-    let mut errors = vec![];
     for (set_name, set_path) in set_info {
-        let set_config = match fs::read(set_path.join(".monja-set.toml")) {
-            Ok(raw) => toml::from_slice(&raw).unwrap(),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => SetConfig::default(),
-            Err(e) => panic!("{}", e), //TODO: dont forget about this. keyword unwrap
-        };
+        // using a lambda so we can use ?, versus branches to populate 2 containers in multiple places in this fragment
+        let set = (|| {
+            let set_config = SetConfig::load(profile, &set_name)?;
 
-        let shortcut = set_config.shortcut.unwrap_or("".into());
-        let shortcut = RelativePathBuf::from_path(shortcut).unwrap();
+            let shortcut = set_config.shortcut.unwrap_or("".into());
+            let shortcut = RelativePathBuf::from_path(&shortcut)
+                .map_err(|e| StateInitializationError::InvalidShortcut(shortcut, e))?;
 
-        let mut locally_mapped_files = HashMap::new();
-        for entry in WalkDir::new(&set_path) {
-            match entry {
-                Ok(entry) if entry.file_type().is_file() => {
+            // TODO: get rid of these .0s. don't want  asref deref tho
+            let root =
+                AbsolutePath::for_existing_path(&profile.repo_root.as_ref().join(&set_name.0))
+                    .expect("These are from the above loop on folders in the repo root.");
+
+            let mut locally_mapped_files = HashMap::new();
+            for entry in WalkDir::new(&set_path) {
+                let entry = entry
+                    .map_err(|e| StateInitializationError::DirectoryWalk(set_name.clone(), e))?;
+                if entry.file_type().is_file() {
                     let path_in_set = entry
                         .path()
                         .strip_prefix(&set_path)
@@ -203,35 +172,41 @@ pub(crate) fn initialize_full_state(root: &AbsolutePath) -> std::io::Result<Repo
                         path,
                     };
 
-                    locally_mapped_files.insert(file.path.local_path().clone(), file);
+                    locally_mapped_files.insert(file.path.local_path.clone(), file);
                 }
-                Err(err) => errors.push(err),
-                _ => {}
-            };
-        }
+                // ignore dirs
+            }
 
-        let root = AbsolutePath::from_path(root.join(&set_name.0)).unwrap();
-        let set = Set {
-            name: set_name.clone(),
-            shortcut,
-            root,
-            locally_mapped_files,
+            Ok(Set {
+                _name: set_name.clone(),
+                shortcut,
+                root,
+                locally_mapped_files,
+            })
+        })();
+        match set {
+            Ok(set) => _ = sets.insert(set_name, set),
+            Err(err) => errors.push(err),
         };
-        sets.insert(set_name, set);
     }
-    let sets = sets;
-    let errors = errors;
 
     if !errors.is_empty() {
-        // TODO: all errors
-        return Err(errors
-            .into_iter()
-            .next()
-            .expect("Already checked that the errors vector isn't empty")
-            .into());
+        return Err(errors);
     }
 
-    Ok(Repo { sets })
+    Ok(RepoState { sets })
 }
 
-// fn set_state(root: &AbsolutePath, )
+#[derive(Error, Debug)]
+pub enum StateInitializationError {
+    #[error("Unable to read the state of the repo.")]
+    Io(#[from] std::io::Error),
+    #[error("Unable to convert dir name into set name: {0:?}")]
+    NonUtf8Path(std::ffi::OsString),
+    #[error("Error in walking directory for set '{0}'.")]
+    DirectoryWalk(SetName, #[source] walkdir::Error),
+    #[error("Unable to load set config.")]
+    SetConfig(#[from] SetConfigError),
+    #[error("Unable to parse set's shortcut: {0}")]
+    InvalidShortcut(PathBuf, #[source] relative_path::FromPathError),
+}

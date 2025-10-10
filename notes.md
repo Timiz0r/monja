@@ -4,15 +4,14 @@
 /
     profile1.toml
     profile2.toml
-    monjasets/
-        set1/
-        set2/
-            `<files>`
-            `<directories>`
-                ...
-                .monja-dir.toml
-            .monja-set.toml
+    set1/
+    set2/
+        `<files>`
+        `<directories>`
+            ...
             .monja-dir.toml
+        .monja-set.toml
+        .monja-dir.toml
 ```
 
 ## .monja-set.toml

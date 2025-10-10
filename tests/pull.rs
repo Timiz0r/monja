@@ -1,7 +1,7 @@
+use googletest::prelude::*;
+
 use crate::sim::{LocalValidation, SetManipulation, Simulator};
 use monja::{MonjaProfileConfig, SetConfig, SetName};
-
-use googletest::prelude::*;
 
 #[allow(dead_code)]
 #[macro_use]
@@ -9,9 +9,10 @@ mod sim;
 
 // TODO: index verification
 // TODO: special files excluded
+// TODO: non-existing monjadir
 
 #[gtest]
-fn simple_set() {
+fn simple_set() -> Result<()> {
     let mut sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
@@ -31,7 +32,7 @@ fn simple_set() {
         file "blueberry" "tart"
     };
 
-    monja::pull(&sim.profile());
+    let _pull_result = monja::pull(&sim.profile())?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -45,10 +46,12 @@ fn simple_set() {
         end
         file "blueberry" "tart"
     };
+
+    Ok(())
 }
 
 #[gtest]
-fn multiple_sets() {
+fn multiple_sets() -> Result<()> {
     let mut sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
@@ -72,7 +75,7 @@ fn multiple_sets() {
         file "set2only" "set2only"
     };
 
-    monja::pull(&sim.profile());
+    let _pull_result = monja::pull(&sim.profile())?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -90,7 +93,7 @@ fn multiple_sets() {
         ..old
     });
 
-    monja::pull(&sim.profile());
+    let _pull_result = monja::pull(&sim.profile())?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -101,10 +104,12 @@ fn multiple_sets() {
         file "set1only" "set1only"
         file "set2only" "set2only"
     };
+
+    Ok(())
 }
 
 #[gtest]
-fn shortcuts() {
+fn shortcuts() -> Result<()> {
     let mut sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2", "set3"]),
@@ -139,7 +144,7 @@ fn shortcuts() {
         file "bar" "set3"
     };
 
-    monja::pull(&sim.profile());
+    let _pull_result = monja::pull(&sim.profile())?;
 
     fs_operation! { LocalValidation, sim,
         dir ".config"
@@ -151,6 +156,8 @@ fn shortcuts() {
             file "blueberry" "tart2"
         end
     };
+
+    Ok(())
 }
 
 #[gtest]

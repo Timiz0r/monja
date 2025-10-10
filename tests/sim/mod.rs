@@ -1,9 +1,9 @@
 use std::{fs, path::Path};
 
-use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
-
 use googletest::prelude::*;
 use tempfile::TempDir;
+
+use monja::{AbsolutePath, MonjaProfile, MonjaProfileConfig, SetConfig, SetName};
 
 // the types here use mutability to indicate file system operations,
 // which is incidentally why we pass references to DirBuilder (sometimes mut), instead of value.
@@ -30,7 +30,7 @@ impl Simulator {
 
         let profile_config = MonjaProfileConfig {
             monja_dir: repo_dir.path().to_path_buf(),
-            target_sets: vec![],
+            target_sets: Vec::new(),
             new_file_set: None,
         };
 
@@ -40,8 +40,8 @@ impl Simulator {
         // also, since this is a fresh dir, no overwriting happens here.
         fs::write(&profile_path, "").unwrap();
         let profile_path =
-            AbsolutePath::from_path(local_dir.path().join(".monja-profile.toml")).unwrap();
-        profile_config.save(&profile_path);
+            AbsolutePath::for_existing_path(&local_dir.path().join(".monja-profile.toml")).unwrap();
+        profile_config.save(&profile_path).unwrap();
 
         Simulator {
             repo_dir,
@@ -53,9 +53,12 @@ impl Simulator {
     pub(crate) fn profile(&self) -> MonjaProfile {
         // we previously stored an instance of the profile
         // however, we changed it to reading a file to get coverage of the code paths
-        let local_root = AbsolutePath::from_path(self.local_dir.path()).unwrap();
+        let local_root = AbsolutePath::for_existing_path(self.local_dir.path()).unwrap();
 
-        MonjaProfileConfig::load(&self.profile_path).into_config(local_root)
+        MonjaProfileConfig::load(&self.profile_path)
+            .unwrap()
+            .into_config(local_root)
+            .unwrap()
     }
 
     // pass by value to move old profile
@@ -64,7 +67,7 @@ impl Simulator {
         P: FnMut(MonjaProfileConfig) -> MonjaProfileConfig,
     {
         let profile_config = config(self.profile().config);
-        profile_config.save(&self.profile_path);
+        profile_config.save(&self.profile_path).unwrap();
 
         self
     }
@@ -74,10 +77,10 @@ impl Simulator {
         P: FnMut(SetConfig) -> SetConfig,
     {
         let profile = self.profile();
-        let set_config = SetConfig::load(&profile, &set_name);
+        let set_config = SetConfig::load(&profile, &set_name).unwrap();
         let set_config = config(set_config);
 
-        set_config.save(&profile, &set_name);
+        set_config.save(&profile, &set_name).unwrap();
 
         self
     }
@@ -92,20 +95,11 @@ impl Simulator {
 }
 
 pub(crate) trait OperationHandler {
-    fn dir<P>(&mut self, path: P)
-    where
-        P: AsRef<Path>;
-    fn remove_dir<P>(&mut self, path: P)
-    where
-        P: AsRef<Path>;
+    fn dir(&mut self, path: &Path);
+    fn remove_dir(&mut self, path: &Path);
 
-    fn file<P, C>(&mut self, path: P, contents: C)
-    where
-        P: AsRef<Path>,
-        C: AsRef<str>;
-    fn remove_file<P, C>(&mut self, path: P)
-    where
-        P: AsRef<Path>;
+    fn file(&mut self, path: &Path, contents: &str);
+    fn remove_file(&mut self, path: &Path);
 
     fn finish(&self);
 }
@@ -117,32 +111,19 @@ impl SetManipulation {
     }
 }
 impl OperationHandler for SetManipulation {
-    fn dir<P>(&mut self, path: P)
-    where
-        P: AsRef<Path>,
-    {
+    fn dir(&mut self, path: &Path) {
         fs::create_dir_all(path).unwrap();
     }
 
-    fn remove_dir<P>(&mut self, path: P)
-    where
-        P: AsRef<Path>,
-    {
+    fn remove_dir(&mut self, path: &Path) {
         fs::remove_dir_all(path).unwrap();
     }
 
-    fn file<P, C>(&mut self, path: P, contents: C)
-    where
-        P: AsRef<Path>,
-        C: AsRef<str>,
-    {
-        fs::write(path, contents.as_ref()).unwrap();
+    fn file(&mut self, path: &Path, contents: &str) {
+        fs::write(path, contents).unwrap();
     }
 
-    fn remove_file<P, C>(&mut self, path: P)
-    where
-        P: AsRef<Path>,
-    {
+    fn remove_file(&mut self, path: &Path) {
         fs::remove_file(path).unwrap();
     }
 
@@ -156,34 +137,21 @@ impl LocalValidation {
     }
 }
 impl OperationHandler for LocalValidation {
-    fn dir<P>(&mut self, path: P)
-    where
-        P: AsRef<Path>,
-    {
-        let dir = fs::read_dir(&path);
+    fn dir(&mut self, path: &Path) {
+        let dir = fs::read_dir(path);
         expect_that!(dir, ok(anything()));
     }
 
-    fn remove_dir<P>(&mut self, _path: P)
-    where
-        P: AsRef<Path>,
-    {
+    fn remove_dir(&mut self, _path: &Path) {
         panic!("Not possible to remove_dir for validation.")
     }
 
-    fn file<P, C>(&mut self, path: P, expected_contents: C)
-    where
-        P: AsRef<Path>,
-        C: AsRef<str>,
-    {
+    fn file(&mut self, path: &Path, expected_contents: &str) {
         let contents = fs::read_to_string(path).unwrap();
-        expect_that!(contents, eq(expected_contents.as_ref()));
+        expect_that!(contents, eq(expected_contents));
     }
 
-    fn remove_file<P, C>(&mut self, _path: P)
-    where
-        P: AsRef<Path>,
-    {
+    fn remove_file(&mut self, _path: &Path) {
         panic!("Not possible to remove_file for validation.")
     }
 
@@ -201,7 +169,7 @@ macro_rules! fs_operation {
     // so putting it at the top to stand out more
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().repo_root.join($set);
+            let path = $sim.profile().repo_root.as_ref().join($set);
             let mut handler = SetManipulation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
@@ -209,7 +177,7 @@ macro_rules! fs_operation {
 
     (LocalValidation, $sim:expr, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().local_root;
+            let path = $sim.profile().local_root.into_path_buf();
             let mut handler = LocalValidation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
