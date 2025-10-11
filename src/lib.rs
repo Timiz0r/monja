@@ -333,7 +333,7 @@ fn rsync(source: &Path, dest: &Path, files: impl Iterator<Item = PathBuf>) -> st
     // note that file sizes still get compared before checksum, so most cases will still be fast.
     let mut child = Command::new("rsync")
         .args([
-            "-av".as_ref(),
+            "-a".as_ref(),
             "--files-from=-".as_ref(),
             "--checksum".as_ref(),
             "--mkpath".as_ref(),
@@ -357,8 +357,7 @@ fn rsync(source: &Path, dest: &Path, files: impl Iterator<Item = PathBuf>) -> st
 
     let status = child.wait_with_output()?;
     println!("Finished rsync with status {}", status.status);
-    // TODO: would be nice to return these instead. would return both for success and failure.
-    std::io::stdout().write_all(&status.stdout)?;
+    // TODO: would be nice to return this instead?
     std::io::stderr().write_all(&status.stderr)?;
 
     match status.status.success() {
