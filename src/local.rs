@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Hash, PartialEq, Eq, Clone, Serialize, Deserialize, Debug)]
-#[serde(from = "std::path::PathBuf")]
+#[serde(try_from = "std::path::PathBuf")]
 #[serde(into = "std::path::PathBuf")]
 pub(crate) struct FilePath(RelativePathBuf);
 impl FilePath {
@@ -36,9 +36,11 @@ impl From<FilePath> for std::path::PathBuf {
         value.0.to_path("") // aka dont specify a base and keep it relative
     }
 }
-impl From<std::path::PathBuf> for FilePath {
-    fn from(value: std::path::PathBuf) -> Self {
-        FilePath(RelativePathBuf::from_path(value).expect("Path is a path"))
+impl TryFrom<std::path::PathBuf> for FilePath {
+    type Error = relative_path::FromPathError;
+
+    fn try_from(value: std::path::PathBuf) -> Result<Self, Self::Error> {
+        Ok(FilePath(RelativePathBuf::from_path(value)?))
     }
 }
 

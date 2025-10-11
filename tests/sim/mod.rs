@@ -86,8 +86,8 @@ impl Simulator {
     }
 
     // adding is handled by set_operation!
-    pub(crate) fn rem_set(&mut self, name: SetName) -> &mut Self {
-        let path = self.repo_dir.path().join(name.0);
+    pub(crate) fn rem_set(&mut self, set_name: SetName) -> &mut Self {
+        let path = self.repo_dir.path().join(set_name);
         fs::remove_dir_all(path).unwrap();
 
         self
@@ -397,21 +397,3 @@ macro_rules! fs_operation {
         fs_operation!(@skip_to_outer $symbols; $depth; ($($tail)*));
     };
 }
-
-// a trimmed down version of what's in monja::local.
-// we don't use that because it's considered an internal implementation detail.
-// but because it's useful to validate, we're doing this
-// TODO: or maybe not! the push tests theoretically will take care of this, after all.
-// TODO: to validate that relative paths are being used, one interesting way is to move the folder and see if it still works
-// #[derive(serde::Serialize, serde::Deserialize)]
-// struct FileIndex {
-//     #[serde(flatten)]
-//     pub set_mapping: HashMap<PathBuf, String>,
-// }
-// impl FileIndex {
-//     fn load(root: &AbsolutePath) -> anyhow::Result<FileIndex> {
-//         let index = std::fs::read(root.as_ref().join(".monja-index.toml"))?;
-
-//         toml::from_slice(&index).map_err(|e| e.into())
-//     }
-// }

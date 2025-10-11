@@ -7,12 +7,27 @@ use walkdir::WalkDir;
 
 use crate::{AbsolutePath, MonjaProfile, local};
 
-// TODO: might as well deref to str and add a from
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct SetName(pub String);
 impl Display for SetName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+impl Deref for SetName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<T> AsRef<T> for SetName
+where
+    T: ?Sized,
+    <Self as Deref>::Target: AsRef<T>,
+{
+    fn as_ref(&self) -> &T {
+        self.deref().as_ref()
     }
 }
 
@@ -36,7 +51,7 @@ impl SetConfig {
         let config_path = profile
             .repo_root
             .as_ref()
-            .join(&set_name.0)
+            .join(set_name)
             .join(".monja-set.toml");
         let config = fs::read(config_path).unwrap_or_default();
 
@@ -48,7 +63,7 @@ impl SetConfig {
         profile: &crate::MonjaProfile,
         set_name: &SetName,
     ) -> Result<(), SetConfigError> {
-        let set_dir = profile.repo_root.as_ref().join(&set_name.0);
+        let set_dir = profile.repo_root.as_ref().join(set_name);
         fs::create_dir_all(&set_dir).map_err(|e| SetConfigError::Save(set_name.clone(), e))?;
 
         let config_path = set_dir.join(".monja-set.toml");
@@ -140,17 +155,12 @@ impl FilePath {
     }
 }
 
-// TODO: am expecting this design to become necessary, though it isnt right now
-// for instance, we might track perms or cleanup state through these
-// additionally, the directory struct might become the representation of a future monja-dir.toml
+// am expecting this design to become necessary, though it isnt *really* right now
 pub(crate) struct File {
     pub owning_set: SetName,
     pub path: FilePath,
 }
 impl File {}
-
-pub(crate) struct _Directory {}
-impl _Directory {}
 
 pub(crate) fn initialize_full_state(
     profile: &MonjaProfile,
@@ -186,10 +196,8 @@ pub(crate) fn initialize_full_state(
             let shortcut = set_config.shortcut.unwrap_or("".into());
             let shortcut = SetShortcut::from_path(shortcut)?;
 
-            // TODO: get rid of these .0s. don't want  asref deref tho
-            let root =
-                AbsolutePath::for_existing_path(&profile.repo_root.as_ref().join(&set_name.0))
-                    .expect("These are from the above loop on folders in the repo root.");
+            let root = AbsolutePath::for_existing_path(&profile.repo_root.as_ref().join(&set_name))
+                .expect("These are from the above loop on folders in the repo root.");
 
             let mut locally_mapped_files = HashMap::new();
             for entry in WalkDir::new(&set_path) {

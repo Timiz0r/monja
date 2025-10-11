@@ -1,6 +1,6 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
-use monja::{AbsolutePath, MonjaProfile};
+use monja::{AbsolutePath, MonjaProfile, PullError, PushError};
 
 use clap::{Args, Parser, Subcommand, command};
 
@@ -37,12 +37,69 @@ impl Commands {
     }
 }
 
-// TODO: macro?
 #[derive(Args)]
 struct PushCommand {}
 impl PushCommand {
     fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
-        let _result = monja::push(&profile)?;
+        let result = monja::push(&profile);
+
+        // want better logging for this
+        if let Err(PushError::Consistency {
+            ref missing_sets,
+            ref missing_files,
+        }) = result
+        {
+            if !missing_sets.is_empty() {
+                // TODO: better recovery mechanisms
+                // easiest would be to select the last set, after which the user can head to the repo to figure it out.
+                eprint!("There are local files whose corresponding sets are missing. ");
+                eprintln!(
+                    "To fix this, manually merge local changes into the repo, then pull the repo."
+                );
+
+                eprintln!("Sets missing, as well as the files that currently require them:");
+                for (set_name, file_paths) in missing_sets {
+                    eprintln!("\tSet: {}", set_name);
+                    for path in file_paths {
+                        eprintln!("\t\t{:?}", path);
+                    }
+                }
+            }
+            if !missing_files.is_empty() {
+                // TODO: better recovery mechanisms
+                // easiest would be to recreate the file in the set or pick the last set
+                eprint!("There are local files missing from expected sets.");
+                eprintln!(
+                    "To fix this, manually merge local changes into the repo, then pull the repo."
+                );
+
+                eprintln!("Files missing, as grouped under the sets they were expected to be in:");
+                for (set_name, file_paths) in missing_files {
+                    eprintln!("\tSet: {}", set_name);
+                    for path in file_paths {
+                        eprintln!("\t\t{:?}", path);
+                    }
+                }
+            }
+            // probably something better to use, but we don't want to double log with the below `result?`.
+            return Err(anyhow::Error::msg("Failed to push."));
+        }
+
+        // log rest of errors like this because lazy
+        let result = result?;
+
+        if !result.files_pushed.is_empty() {
+            println!("Files pushed, as grouped under their corresponding sets:");
+            for (set_name, file_paths) in result.files_pushed.iter() {
+                eprintln!("\tSet: {}", set_name);
+                for path in file_paths {
+                    eprintln!("\t\t{:?}", path);
+                }
+            }
+        } else {
+            println!("No files pushed.");
+        }
+
         Ok(())
     }
 }
@@ -50,8 +107,34 @@ impl PushCommand {
 #[derive(Args)]
 struct PullCommand {}
 impl PullCommand {
-    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
-        todo!()
+    fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
+        let result = monja::pull(&profile);
+
+        if let Err(PullError::MissingSets(ref missing_sets)) = result {
+            eprintln!(
+                "Sets needed by the profile are missing from the repo: {:?}",
+                missing_sets
+            );
+            eprintln!("Verify that the right set of sets in '.monja-profile.toml' are present.");
+            // probably something better to use, but we don't want to double log with the below `result?`.
+            return Err(anyhow::Error::msg("Failed to pull."));
+        }
+
+        let result = result?;
+
+        if !result.files_pulled.is_empty() {
+            println!("Files to be pulled, as grouped under their corresponding sets:");
+            for (set_name, file_paths) in result.files_pulled.into_iter() {
+                eprintln!("\tSet: {}", set_name);
+                for path in file_paths {
+                    eprintln!("\t\t'{:?}' -> '{:?}'", path.path_in_set, path.local_path);
+                }
+            }
+        } else {
+            println!("No files pulled.");
+        }
+
+        Ok(())
     }
 }
 
@@ -78,8 +161,6 @@ impl ChangeProfileCommand {
         todo!()
     }
 }
-
-// TODO: some things named root should probably be base?
 
 fn main() -> anyhow::Result<()> {
     let mut profile_path =

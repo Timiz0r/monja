@@ -62,6 +62,12 @@ impl From<local::FilePath> for LocalFilePath {
         LocalFilePath(value.into_relative_path_buf().to_path(""))
     }
 }
+impl AsRef<Path> for LocalFilePath {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
 #[derive(Debug)]
 pub struct RepoFilePath {
     pub path_in_set: PathBuf,
@@ -167,60 +173,14 @@ pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
             missing_files,
         });
     }
-    // if !local_state.missing_sets.is_empty() {
-    //     cont = false;
-
-    //     // TODO: better recovery mechanisms
-    //     // easiest would be to select the last set, after which the user can head to the repo to figure it out.
-    //     eprint!("There are local files whose corresponding sets are missing. ");
-    //     eprintln!("To fix this, manually merge local changes into the repo, then pull the repo.");
-
-    //     eprintln!("Sets missing, as well as the files that currently require them:");
-    //     for (set_name, file_paths) in local_state.missing_sets {
-    //         eprintln!("\tSet: {}", set_name);
-    //         for path in file_paths {
-    //             eprintln!("\t\t{}", path.relative_path());
-    //         }
-    //     }
-    // }
-    // if !local_state.missing_files.is_empty() {
-    //     cont = false;
-
-    //     // TODO: better recovery mechanisms
-    //     // easiest would be to recreate the file in the set or pick the last set
-    //     eprint!("There are local files missing from expected sets.");
-    //     eprintln!("To fix this, manually merge local changes into the repo, then pull the repo.");
-
-    //     eprintln!("Files missing, as grouped under the sets they were expected to be in:");
-    //     for (set_name, file_paths) in local_state.missing_files {
-    //         eprintln!("\tSet: {}", set_name);
-    //         for path in file_paths {
-    //             eprintln!("\t\t{}", path.relative_path());
-    //         }
-    //     }
-    // }
 
     if !local_state.files_to_push.is_empty() {
-        println!("Files to be pushed, as grouped under their corresponding sets:");
-        for (set_name, file_paths) in local_state.files_to_push.iter() {
-            eprintln!("\tSet: {}", set_name);
-            for path in file_paths {
-                eprintln!("\t\t{}", path.as_ref());
-            }
-        }
-
         let mut repo = repo;
         for (set_name, files) in local_state.files_to_push.iter() {
             let set = repo
                 .sets
                 .remove(set_name)
-                //TODO: see https://doc.rust-lang.org/stable/std/error/index.html#common-message-styles
                 .expect("Already checked for missing sets.");
-
-            // TODO: test that (attacker) modification of the index in order to traverse higher directories isnt possible
-            //      since we could always move from rsync in the future and miss this
-            // note that because we use rsync with a source folder specified, we cant escape to a higher level,
-            // which mitigates potential directory traversal attacks.
 
             // lets say set shortcut is foo/bar and file baz
             // transfer looks something like this: /home/xx/foo/bar/baz -> /monja/set/baz
@@ -231,13 +191,10 @@ pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
                 set.root.as_ref(),
                 files
                     .iter()
-                    // TODO: could move this logic to repo module, since it knows both local and repo paths, plus how to map
                     .map(|local_path| set.shortcut.relative(local_path.as_ref()).to_path("")),
             )
             .map_err(PushError::Rsync)?;
         }
-    } else {
-        println!("No files to be pushed.");
     }
 
     let files_to_push = convert_path_result(
@@ -264,7 +221,7 @@ pub enum PullError {
 
 #[derive(Debug)]
 pub struct PullSuccess {
-    pub files_to_pull: Vec<(SetName, Vec<RepoFilePath>)>,
+    pub files_pulled: Vec<(SetName, Vec<RepoFilePath>)>,
 }
 
 pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
@@ -319,12 +276,6 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
 
     if !missing_sets.is_empty() {
         return Err(PullError::MissingSets(missing_sets));
-        // eprintln!(
-        //     "Sets needed by the profile are missing from the repo: {:?}",
-        //     missing_sets
-        // );
-        // eprintln!("Verify that the right set of sets in '.monja-profile.toml' are present.");
-        // return;
     }
 
     let mut files_to_pull = HashMap::with_capacity(set_info.len());
@@ -336,22 +287,6 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
             .push(repo_file.path);
 
         index_files.insert(local_path, repo_file.owning_set);
-    }
-
-    println!("Files to be pulled, as grouped under their corresponding sets:");
-    for set_name in profile.config.target_sets.iter() {
-        let file_paths = files_to_pull
-            .get(set_name)
-            .expect("Already checked for missing sets.");
-
-        eprintln!("\tSet: {}", set_name);
-        for path in file_paths {
-            eprintln!(
-                "\t\t'{}' -> '{}'",
-                path.path_in_set,
-                path.local_path.as_ref()
-            );
-        }
     }
 
     for set_name in profile.config.target_sets.iter() {
@@ -375,13 +310,16 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
         .map_err(PullError::Rsync)?;
     }
 
+    // TODO: what if rsync failed and we don't update index even though some copies happened?
     let index = local::FileIndex::new(index_files);
     index
         .save(&profile.local_root)
         .map_err(|_| PullError::FileIndex)?;
 
     let files_to_pull = convert_path_result(files_to_pull.len(), files_to_pull.into_iter());
-    Ok(PullSuccess { files_to_pull })
+    Ok(PullSuccess {
+        files_pulled: files_to_pull,
+    })
 }
 
 pub fn local_status(_profile: &MonjaProfile) {

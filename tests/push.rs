@@ -1,7 +1,12 @@
+use std::fs;
+
 use googletest::prelude::*;
-use monja::{AbsolutePath, MonjaProfileConfig, MonjaProfileConfigError, PushError, SetName};
 
 use crate::sim::{Simulator, set_names};
+use monja::{
+    AbsolutePath, LocalStateInitializationError, MonjaProfileConfig, MonjaProfileConfigError,
+    PushError, SetName,
+};
 
 #[allow(dead_code)]
 #[macro_use]
@@ -263,6 +268,71 @@ fn no_index() -> Result<()> {
     // no pull, no index
 
     let push_result = monja::push(&sim.profile()?)?;
+    expect_that!(push_result.files_pushed, len(eq(0)));
+
+    Ok(())
+}
+
+#[gtest]
+fn index_based_directory_traversal_absolute() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+        file "blueberry" "tart"
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?)?;
+
+    // a bit of a leaky implementation detail, but oh well
+    let index_path = sim.profile()?.local_root.as_ref().join(".monja-index.toml");
+    assert_that!(index_path.exists(), is_true());
+
+    let replacement_index = r#""/etc/passwd" = "simple""#;
+    fs::write(index_path, replacement_index)?;
+
+    let push_result = monja::push(&sim.profile()?);
+
+    let specific_error = pat!(LocalStateInitializationError::FileIndex(_));
+    expect_that!(
+        push_result,
+        err(pat!(PushError::LocalStateInitialization(specific_error)))
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn index_based_directory_traversal_relative() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+        file "blueberry" "tart"
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?)?;
+
+    // a bit of a leaky implementation detail, but oh well
+    let index_path = sim.profile()?.local_root.as_ref().join(".monja-index.toml");
+    assert_that!(index_path.exists(), is_true());
+
+    let foo_path = sim.profile()?.local_root.as_ref().join("../foo");
+    fs::write(foo_path, "foo")?;
+
+    let replacement_index = r#""../foo" = "simple""#;
+    fs::write(index_path, replacement_index)?;
+
+    let push_result = monja::push(&sim.profile()?)?;
+
+    // since this file lives outside of the local root, it shouldn't get picked up whether or not it's mentioned in the index
+    // this is because we do a full scan of the directory to find inconsistencies and flag them for the user/recover.
     expect_that!(push_result.files_pushed, len(eq(0)));
 
     Ok(())
