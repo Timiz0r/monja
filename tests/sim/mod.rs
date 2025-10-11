@@ -56,12 +56,14 @@ impl Simulator {
         // however, we changed it to reading a file to get coverage of the code paths
         let local_root = AbsolutePath::for_existing_path(self.local_dir.path()).unwrap();
 
-        MonjaProfileConfig::load(&self.profile_path)
-            .unwrap()
-            .into_config(local_root)
+        // NOTE: MonjaProfile::from_config just gives an io::Error, but that's getting into'd into a MonjaProfileConfigError
+        // which works fine for our case, but don't be misled!
+        Ok(MonjaProfile::from_config(
+            MonjaProfileConfig::load(&self.profile_path)?,
+            local_root,
+        )?)
     }
 
-    // pass by value to move old profile
     pub(crate) fn configure_profile<P>(&mut self, mut config: P) -> &mut Self
     where
         P: FnMut(MonjaProfileConfig) -> MonjaProfileConfig,
@@ -179,6 +181,7 @@ pub(crate) struct SetValidation {
     set_root: PathBuf,
     general_validation: GeneralValidation,
 }
+
 impl SetValidation {
     pub fn new(sim: &Simulator, set_root: &Path) -> Self {
         SetValidation {
@@ -187,6 +190,7 @@ impl SetValidation {
         }
     }
 }
+
 impl OperationHandler for SetValidation {
     fn dir(&mut self, path: &Path) {
         self.general_validation.dir(path);
@@ -220,6 +224,7 @@ impl OperationHandler for SetValidation {
 struct GeneralValidation {
     pub files: HashSet<PathBuf>,
 }
+
 impl GeneralValidation {
     pub fn new(_: &Simulator) -> Self {
         GeneralValidation {
@@ -227,6 +232,7 @@ impl GeneralValidation {
         }
     }
 }
+
 impl OperationHandler for GeneralValidation {
     fn dir(&mut self, path: &Path) {
         let dir = fs::read_dir(path);

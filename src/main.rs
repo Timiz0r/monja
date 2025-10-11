@@ -1,6 +1,6 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
-use monja::{AbsolutePath, MonjaProfile, PullError, PushError};
+use monja::{AbsolutePath, MonjaProfile};
 
 use clap::{Args, Parser, Subcommand, command};
 
@@ -44,12 +44,12 @@ impl PushCommand {
         let result = monja::push(&profile);
 
         // want better logging for this
-        if let Err(PushError::Consistency {
-            ref missing_sets,
-            ref missing_files,
+        if let Err(monja::PushError::Consistency {
+            files_with_missing_sets,
+            missing_files,
         }) = result
         {
-            if !missing_sets.is_empty() {
+            if !files_with_missing_sets.is_empty() {
                 // TODO: better recovery mechanisms
                 // easiest would be to select the last set, after which the user can head to the repo to figure it out.
                 eprint!("There are local files whose corresponding sets are missing. ");
@@ -58,7 +58,7 @@ impl PushCommand {
                 );
 
                 eprintln!("Sets missing, as well as the files that currently require them:");
-                for (set_name, file_paths) in missing_sets {
+                for (set_name, file_paths) in files_with_missing_sets {
                     eprintln!("\tSet: {}", set_name);
                     for path in file_paths {
                         eprintln!("\t\t{:?}", path);
@@ -110,7 +110,7 @@ impl PullCommand {
     fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
         let result = monja::pull(&profile);
 
-        if let Err(PullError::MissingSets(ref missing_sets)) = result {
+        if let Err(monja::PullError::MissingSets(missing_sets)) = result {
             eprintln!(
                 "Sets needed by the profile are missing from the repo: {:?}",
                 missing_sets
@@ -169,7 +169,10 @@ fn main() -> anyhow::Result<()> {
     profile_path.push(".monja-profile.toml");
     let profile_path = AbsolutePath::for_existing_path(&profile_path)?;
 
-    let profile = monja::MonjaProfileConfig::load(&profile_path)?.into_config(local_root)?;
+    let profile = monja::MonjaProfile::from_config(
+        monja::MonjaProfileConfig::load(&profile_path)?,
+        local_root,
+    )?;
 
     let cli = Cli::parse();
     cli.command.execute(profile)

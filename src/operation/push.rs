@@ -1,0 +1,76 @@
+use thiserror::Error;
+
+use crate::{LocalFilePath, MonjaProfile, convert_set_file_result, local, repo, rsync};
+
+#[derive(Error, Debug)]
+pub enum PushError {
+    #[error("Unable to initialize repo state.")]
+    RepoStateInitialization(Vec<repo::StateInitializationError>),
+    #[error("Unable to initialize local state.")]
+    LocalStateInitialization(#[from] local::StateInitializationError),
+    #[error("The local index and repo were found to be out of sync.")]
+    Consistency {
+        files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+        missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    },
+    #[error("Failed to copy files via rsync.")]
+    Rsync(#[source] std::io::Error),
+}
+
+#[derive(Debug)]
+pub struct PushSuccess {
+    pub files_pushed: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+}
+
+pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
+    let repo = repo::initialize_full_state(profile).map_err(PushError::RepoStateInitialization)?;
+    let local_state = local::retrieve_state(profile, &repo)?;
+
+    if !local_state.files_with_missing_sets.is_empty() || !local_state.missing_files.is_empty() {
+        let files_with_missing_sets = convert_set_file_result(
+            &profile.config.target_sets,
+            local_state.files_with_missing_sets,
+        );
+        let missing_files =
+            convert_set_file_result(&profile.config.target_sets, local_state.missing_files);
+
+        return Err(PushError::Consistency {
+            files_with_missing_sets,
+            missing_files,
+        });
+    }
+    if local_state.files_to_push.is_empty() {
+        return Ok(PushSuccess {
+            files_pushed: Default::default(),
+        });
+    }
+
+    let mut repo = repo;
+    for set_name in profile.config.target_sets.iter() {
+        let set = repo
+            .sets
+            .remove(set_name)
+            .expect("Already checked for missing sets.");
+        let files = local_state
+            .files_to_push
+            .get(set_name)
+            .expect("Will be an empty vec if set has none. Otherwise, set exists.");
+
+        // lets say set shortcut is foo/bar and file baz
+        // transfer looks something like this: /home/xx/foo/bar/baz -> /monja/set/baz
+        // here, the source is /home/xx/foo/bar/, dest is /monja/set/, and file is baz
+        // incidentally, local::FilePath is foo/bar/baz
+        rsync(
+            set.shortcut.to_path(profile.local_root.as_ref()).as_path(),
+            set.root.as_ref(),
+            files
+                .iter()
+                .map(|local_path| set.shortcut.relative(local_path.as_ref()).to_path("")),
+        )
+        .map_err(PushError::Rsync)?;
+    }
+
+    let files_pushed =
+        convert_set_file_result(&profile.config.target_sets, local_state.files_to_push);
+    Ok(PushSuccess { files_pushed })
+}

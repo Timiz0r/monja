@@ -145,7 +145,7 @@ fn missing_set() -> Result<()> {
     expect_that!(
         push_result,
         err(pat!(PushError::Consistency {
-            missing_sets: len(eq(1)),
+            files_with_missing_sets: len(eq(1)),
             missing_files: len(eq(0))
         }))
     );
@@ -176,7 +176,7 @@ fn missing_files() -> Result<()> {
     expect_that!(
         push_result,
         err(pat!(PushError::Consistency {
-            missing_sets: len(eq(0)),
+            files_with_missing_sets: len(eq(0)),
             missing_files: len(eq(1))
         }))
     );
