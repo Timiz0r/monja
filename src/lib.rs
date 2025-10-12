@@ -11,6 +11,7 @@ use std::{
     sync::LazyLock,
 };
 
+use clap::Args;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -73,6 +74,7 @@ pub struct MonjaProfile {
 
     pub config: MonjaProfileConfig,
 }
+
 impl MonjaProfile {
     pub fn from_config(
         config: MonjaProfileConfig,
@@ -84,6 +86,15 @@ impl MonjaProfile {
             config,
         })
     }
+}
+
+#[derive(Args)]
+pub struct ExecutionOptions {
+    #[arg(short, long = "verbose", action = clap::ArgAction::Count)]
+    pub verbosity: u8,
+
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Debug)]
@@ -175,20 +186,28 @@ pub(crate) fn rsync(
     source: &Path,
     dest: &Path,
     files: impl Iterator<Item = PathBuf>,
+    opts: &ExecutionOptions,
 ) -> std::io::Result<()> {
     // we use checksum mainly because, in integration tests, some files have same size and modified time
     // this could hypothetically happen in practice, so checksum is perhaps good.
     // note that file sizes still get compared before checksum, so most cases will still be fast.
+    let mut args: Vec<&OsStr> = vec![
+        "-a".as_ref(),
+        "--files-from=-".as_ref(),
+        "--checksum".as_ref(),
+        "--mkpath".as_ref(),
+    ];
+    if opts.verbosity > 0 {
+        args.push("-v".as_ref());
+    }
+    args.push(source.as_os_str());
+    // append a /
+    // works with mkpath to ensure the dir is properly created if needed
+    let dest = dest.join("").into_os_string();
+    args.push(&dest);
+
     let mut child = Command::new("rsync")
-        .args([
-            "-a".as_ref(),
-            "--files-from=-".as_ref(),
-            "--checksum".as_ref(),
-            "--mkpath".as_ref(),
-            source.as_os_str(),
-            // works with mkpath to ensure the dir is properly created if needed
-            dest.join("").as_os_str(),
-        ])
+        .args(args)
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;

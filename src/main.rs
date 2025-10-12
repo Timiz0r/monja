@@ -1,12 +1,16 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
-use monja::{AbsolutePath, MonjaProfile};
+use monja::{AbsolutePath, ExecutionOptions, MonjaProfile};
 
 use clap::{Args, Parser, Subcommand, command};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
+    // also considering shoving everything except command into a flattened struct, but meh it fine for now
+    #[command(flatten)]
+    opts: ExecutionOptions,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -24,14 +28,16 @@ enum Commands {
 
 // TODO: macro?
 impl Commands {
-    fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
+    fn execute(&self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         match self {
-            Commands::Push(push_command) => push_command.execute(profile),
-            Commands::Pull(pull_command) => pull_command.execute(profile),
-            Commands::Init(init_command) => init_command.execute(profile),
-            Commands::LocalStatus(local_status_command) => local_status_command.execute(profile),
+            Commands::Push(push_command) => push_command.execute(profile, opts),
+            Commands::Pull(pull_command) => pull_command.execute(profile, opts),
+            Commands::Init(init_command) => init_command.execute(profile, opts),
+            Commands::LocalStatus(local_status_command) => {
+                local_status_command.execute(profile, opts)
+            }
             Commands::ChangeProfile(change_profile_command) => {
-                change_profile_command.execute(profile)
+                change_profile_command.execute(profile, opts)
             }
         }
     }
@@ -40,8 +46,8 @@ impl Commands {
 #[derive(Args)]
 struct PushCommand {}
 impl PushCommand {
-    fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
-        let result = monja::push(&profile);
+    fn execute(&self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+        let result = monja::push(&profile, &opts);
 
         // want better logging for this
         if let Err(monja::PushError::Consistency {
@@ -107,8 +113,8 @@ impl PushCommand {
 #[derive(Args)]
 struct PullCommand {}
 impl PullCommand {
-    fn execute(self, profile: MonjaProfile) -> anyhow::Result<()> {
-        let result = monja::pull(&profile);
+    fn execute(&self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+        let result = monja::pull(&profile, &opts);
 
         if let Err(monja::PullError::MissingSets(missing_sets)) = result {
             eprintln!(
@@ -141,7 +147,7 @@ impl PullCommand {
 #[derive(Args)]
 struct InitCommand {}
 impl InitCommand {
-    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
+    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -149,7 +155,7 @@ impl InitCommand {
 #[derive(Args)]
 struct LocalStatusCommand {}
 impl LocalStatusCommand {
-    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
+    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -157,7 +163,7 @@ impl LocalStatusCommand {
 #[derive(Args)]
 struct ChangeProfileCommand {}
 impl ChangeProfileCommand {
-    fn execute(self, _profile: MonjaProfile) -> anyhow::Result<()> {
+    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
         todo!()
     }
 }
@@ -175,5 +181,5 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     let cli = Cli::parse();
-    cli.command.execute(profile)
+    cli.command.execute(profile, cli.opts)
 }

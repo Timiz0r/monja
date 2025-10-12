@@ -1,6 +1,8 @@
 use thiserror::Error;
 
-use crate::{LocalFilePath, MonjaProfile, convert_set_file_result, local, repo, rsync};
+use crate::{
+    ExecutionOptions, LocalFilePath, MonjaProfile, convert_set_file_result, local, repo, rsync,
+};
 
 #[derive(Error, Debug)]
 pub enum PushError {
@@ -22,7 +24,7 @@ pub struct PushSuccess {
     pub files_pushed: Vec<(repo::SetName, Vec<LocalFilePath>)>,
 }
 
-pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
+pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSuccess, PushError> {
     let repo = repo::initialize_full_state(profile).map_err(PushError::RepoStateInitialization)?;
     let local_state = local::retrieve_state(profile, &repo)?;
 
@@ -45,29 +47,31 @@ pub fn push(profile: &MonjaProfile) -> Result<PushSuccess, PushError> {
         });
     }
 
-    let mut repo = repo;
-    for set_name in profile.config.target_sets.iter() {
-        let set = repo
-            .sets
-            .remove(set_name)
-            .expect("Already checked for missing sets.");
-        let files = local_state
-            .files_to_push
-            .get(set_name)
-            .expect("Will be an empty vec if set has none. Otherwise, set exists.");
+    if !opts.dry_run {
+        for set_name in profile.config.target_sets.iter() {
+            let set = repo
+                .sets
+                .get(set_name)
+                .expect("Already checked for missing sets.");
+            let files = local_state
+                .files_to_push
+                .get(set_name)
+                .expect("Will be an empty vec if set has none. Otherwise, set exists.");
 
-        // lets say set shortcut is foo/bar and file baz
-        // transfer looks something like this: /home/xx/foo/bar/baz -> /monja/set/baz
-        // here, the source is /home/xx/foo/bar/, dest is /monja/set/, and file is baz
-        // incidentally, local::FilePath is foo/bar/baz
-        rsync(
-            set.shortcut.to_path(profile.local_root.as_ref()).as_path(),
-            set.root.as_ref(),
-            files
-                .iter()
-                .map(|local_path| set.shortcut.relative(local_path.as_ref()).to_path("")),
-        )
-        .map_err(PushError::Rsync)?;
+            // lets say set shortcut is foo/bar and file baz
+            // transfer looks something like this: /home/xx/foo/bar/baz -> /monja/set/baz
+            // here, the source is /home/xx/foo/bar/, dest is /monja/set/, and file is baz
+            // incidentally, local::FilePath is foo/bar/baz
+            rsync(
+                set.shortcut.to_path(profile.local_root.as_ref()).as_path(),
+                set.root.as_ref(),
+                files
+                    .iter()
+                    .map(|local_path| set.shortcut.relative(local_path.as_ref()).to_path("")),
+                opts,
+            )
+            .map_err(PushError::Rsync)?;
+        }
     }
 
     let files_pushed =

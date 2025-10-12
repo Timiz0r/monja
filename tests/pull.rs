@@ -2,8 +2,8 @@ use googletest::prelude::*;
 
 use crate::sim::{Simulator, set_names};
 use monja::{
-    AbsolutePath, MonjaProfile, MonjaProfileConfig, PullError, RepoStateInitializationError,
-    SetConfig, SetName,
+    AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, PullError,
+    RepoStateInitializationError, SetConfig, SetName,
 };
 
 #[allow(dead_code)]
@@ -31,7 +31,7 @@ fn simple_set() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -74,7 +74,7 @@ fn multiple_sets() -> Result<()> {
         file "set2only" "set2only"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -92,7 +92,7 @@ fn multiple_sets() -> Result<()> {
         ..old
     });
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -144,7 +144,7 @@ fn shortcuts() -> Result<()> {
         end
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalValidation, sim,
         dir ".config"
@@ -175,7 +175,7 @@ fn shorcut_directory_traversal() -> Result<()> {
         file "foo" "set1"
     };
 
-    let result = monja::pull(&sim.profile()?);
+    let result = monja::pull(&sim.profile()?, sim.execution_options());
     let specific_error = contains(pat!(RepoStateInitializationError::SetShortcutInvalid(
         pat!(monja::SetShortcutError::TraversalToParent(..))
     )));
@@ -201,7 +201,7 @@ fn shorcut_absolute_path() -> Result<()> {
         file "foo" "set1"
     };
 
-    let result = monja::pull(&sim.profile()?);
+    let result = monja::pull(&sim.profile()?, sim.execution_options());
     let specific_error = contains(pat!(RepoStateInitializationError::SetShortcutInvalid(
         pat!(monja::SetShortcutError::NotRelative(..))
     )));
@@ -228,7 +228,7 @@ fn missing_set() -> Result<()> {
         end
         file "set1only" "set1only"
     };
-    let result = monja::pull(&sim.profile()?);
+    let result = monja::pull(&sim.profile()?, sim.execution_options());
     expect_that!(
         result,
         err(pat!(PullError::MissingSets(contains(eq(&SetName(
@@ -268,7 +268,7 @@ fn missing_repo_folder() -> Result<()> {
         repo_root,
         ..sim.profile()?
     };
-    let result = monja::pull(&profile);
+    let result = monja::pull(&profile, sim.execution_options());
     let specific_error = contains(pat!(RepoStateInitializationError::Io(..)));
     expect_that!(
         result,
@@ -290,11 +290,35 @@ fn set_with_empty_name() -> Result<()> {
         file "foo" "set1"
     };
 
-    let result = monja::pull(&sim.profile()?);
+    let result = monja::pull(&sim.profile()?, sim.execution_options());
     expect_that!(
         result,
         err(pat!(PullError::MissingSets(container_eq(set_names([""])))))
     );
+
+    Ok(())
+}
+
+#[gtest]
+fn dry_run() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+        file "blueberry" "tart"
+    };
+
+    let opts = ExecutionOptions {
+        dry_run: true,
+        verbosity: 0,
+    };
+    let _pull_result = monja::pull(&sim.profile()?, &opts)?;
+
+    fs_operation! { LocalValidation, sim,
+    };
 
     Ok(())
 }

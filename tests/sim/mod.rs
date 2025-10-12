@@ -8,14 +8,20 @@ use googletest::prelude::*;
 use tempfile::TempDir;
 
 use monja::{
-    AbsolutePath, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError, SetConfig, SetName,
+    AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
+    SetConfig, SetName,
 };
 use walkdir::WalkDir;
+
+// NOTE: currently, when testing error cases, many tests inspect the error to ensure it's erroring out for the right reason.
+// while this can cause excessive coupling to internal behavior, it's preferable to missing an issue.
+// if we find that a test is to fragile, we can of course loosen the matching, or perhaps even come up with a better overall design.
 
 pub(crate) struct Simulator {
     repo_dir: TempDir,
     local_dir: TempDir,
     profile_path: AbsolutePath,
+    opts: ExecutionOptions,
 }
 
 impl Simulator {
@@ -48,6 +54,10 @@ impl Simulator {
             repo_dir,
             local_dir,
             profile_path,
+            opts: ExecutionOptions {
+                verbosity: 0,
+                dry_run: false,
+            },
         }
     }
 
@@ -62,6 +72,10 @@ impl Simulator {
             MonjaProfileConfig::load(&self.profile_path)?,
             local_root,
         )?)
+    }
+
+    pub(crate) fn execution_options(&self) -> &ExecutionOptions {
+        &self.opts
     }
 
     pub(crate) fn configure_profile<P>(&mut self, mut config: P) -> &mut Self

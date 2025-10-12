@@ -4,8 +4,8 @@ use googletest::prelude::*;
 
 use crate::sim::{Simulator, set_names};
 use monja::{
-    AbsolutePath, LocalStateInitializationError, MonjaProfileConfig, MonjaProfileConfigError,
-    PushError, SetName,
+    AbsolutePath, ExecutionOptions, LocalStateInitializationError, MonjaProfileConfig,
+    MonjaProfileConfigError, PushError, SetName,
 };
 
 #[allow(dead_code)]
@@ -37,7 +37,7 @@ fn simple_set() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalManipulation, sim,
         dir "apple"
@@ -47,7 +47,7 @@ fn simple_set() -> Result<()> {
         file "newfile" "newfile"
     };
 
-    let _push_result = monja::push(&sim.profile()?)?;
+    let _push_result = monja::push(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { SetValidation, sim, "simple",
         dir "foo"
@@ -91,7 +91,7 @@ fn multi_set() -> Result<()> {
         file "set2only" "set2only"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalManipulation, sim,
         dir "foo/bar"
@@ -101,7 +101,7 @@ fn multi_set() -> Result<()> {
         file "set2only" "stillset2"
     };
 
-    let _push_result = monja::push(&sim.profile()?)?;
+    let _push_result = monja::push(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { SetValidation, sim, "set1",
         dir "foo"
@@ -137,11 +137,11 @@ fn missing_set() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     sim.rem_set(SetName("simple".into()));
 
-    let push_result = monja::push(&sim.profile()?);
+    let push_result = monja::push(&sim.profile()?, sim.execution_options());
     expect_that!(
         push_result,
         err(pat!(PushError::Consistency {
@@ -166,13 +166,13 @@ fn missing_files() -> Result<()> {
         file "apple" "pie"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { SetManipulation, sim, "simple",
         remfile "blueberry"
     };
 
-    let push_result = monja::push(&sim.profile()?);
+    let push_result = monja::push(&sim.profile()?, sim.execution_options());
     expect_that!(
         push_result,
         err(pat!(PushError::Consistency {
@@ -205,7 +205,7 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
         file "apple" "pie"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?);
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options());
 
     std::mem::drop(temp_repo_root);
 
@@ -238,12 +238,12 @@ fn missing_repo_folder_post_profile() -> Result<()> {
         file "apple" "pie"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?);
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options());
 
     let profile = sim.profile()?;
     std::mem::drop(temp_repo_root);
 
-    let push_result = monja::push(&profile);
+    let push_result = monja::push(&profile, sim.execution_options());
     expect_that!(
         push_result,
         err(pat!(PushError::RepoStateInitialization(_)))
@@ -267,7 +267,7 @@ fn no_index() -> Result<()> {
     // let _pull_result = monja::pull(&sim.profile()?)?;
     // no pull, no index
 
-    let push_result = monja::push(&sim.profile()?)?;
+    let push_result = monja::push(&sim.profile()?, sim.execution_options())?;
     expect_that!(push_result.files_pushed, len(eq(0)));
 
     Ok(())
@@ -285,7 +285,7 @@ fn index_based_directory_traversal_absolute() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     // a bit of a leaky implementation detail, but oh well
     let index_path = sim.profile()?.local_root.as_ref().join(".monja-index.toml");
@@ -294,7 +294,7 @@ fn index_based_directory_traversal_absolute() -> Result<()> {
     let replacement_index = r#""/etc/passwd" = "simple""#;
     fs::write(index_path, replacement_index)?;
 
-    let push_result = monja::push(&sim.profile()?);
+    let push_result = monja::push(&sim.profile()?, sim.execution_options());
 
     let specific_error = pat!(LocalStateInitializationError::FileIndex(_));
     expect_that!(
@@ -317,7 +317,7 @@ fn index_based_directory_traversal_relative() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     // a bit of a leaky implementation detail, but oh well
     let index_path = sim.profile()?.local_root.as_ref().join(".monja-index.toml");
@@ -329,11 +329,64 @@ fn index_based_directory_traversal_relative() -> Result<()> {
     let replacement_index = r#""../foo" = "simple""#;
     fs::write(index_path, replacement_index)?;
 
-    let push_result = monja::push(&sim.profile()?)?;
+    let push_result = monja::push(&sim.profile()?, sim.execution_options())?;
 
     // since this file lives outside of the local root, it shouldn't get picked up whether or not it's mentioned in the index
     // this is because we do a full scan of the directory to find inconsistencies and flag them for the user/recover.
     expect_that!(push_result.files_pushed, len(eq(0)));
+
+    Ok(())
+}
+
+#[gtest]
+fn dry_run() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+        dir "foo"
+            dir "bar/baz"
+                file "cake" "cake"
+            end
+        end
+        dir "apple"
+            file "pie" "pie"
+            file "pasta" "pasta"
+        end
+        file "blueberry" "tart"
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { LocalManipulation, sim,
+        dir "apple"
+            file "pie" "nopie"
+            file "pasta" "nopasta"
+        end
+        file "newfile" "newfile"
+    };
+
+    let opts = ExecutionOptions {
+        dry_run: true,
+        verbosity: 0,
+    };
+    let _push_result = monja::push(&sim.profile()?, &opts)?;
+
+    fs_operation! { SetValidation, sim, "simple",
+        dir "foo"
+            dir "bar/baz"
+                file "cake" "cake"
+            end
+        end
+        dir "apple"
+            file "pie" "pie"
+            file "pasta" "pasta"
+        end
+        file "blueberry" "tart"
+    };
 
     Ok(())
 }

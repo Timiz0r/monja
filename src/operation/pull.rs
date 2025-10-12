@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::{
-    AbsolutePath, MonjaProfile, RepoFilePath, SetName, convert_set_file_result, local, repo, rsync,
+    AbsolutePath, ExecutionOptions, MonjaProfile, RepoFilePath, SetName, convert_set_file_result,
+    local, repo, rsync,
 };
 
 #[derive(Error, Debug)]
@@ -24,17 +25,7 @@ pub struct PullSuccess {
     pub files_pulled: Vec<(SetName, Vec<RepoFilePath>)>,
 }
 
-pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
-    // the code ends up being the cleanest when files takes ownership of its data from repo,
-    // since that data becomes part of the result.
-    // in order to take ownership, we .remove() them (from sets).
-    // if we instead used get(), we'd have to do a lot of cloning.
-    // the only problem is we partial move the set, so it's not like we can store it anywhere directly.
-    // instead, we just move out the rest of the set info we need, at the cost of a small hashmap.
-    struct SetInfo {
-        root: AbsolutePath,
-        shortcut: repo::SetShortcut,
-    }
+pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSuccess, PullError> {
     let mut set_info = HashMap::with_capacity(profile.config.target_sets.len());
 
     let mut repo =
@@ -90,33 +81,47 @@ pub fn pull(profile: &MonjaProfile) -> Result<PullSuccess, PullError> {
         index.set(local_path, repo_file.owning_set);
     }
 
-    for set_name in profile.config.target_sets.iter() {
-        let set = set_info
-            .get(set_name)
-            .expect("Already checked for missing sets.");
-        let file_paths = files_to_pull
-            .get(set_name)
-            .expect("Already checked for missing sets.");
+    if !opts.dry_run {
+        for set_name in profile.config.target_sets.iter() {
+            let set = set_info
+                .get(set_name)
+                .expect("Already checked for missing sets.");
+            let file_paths = files_to_pull
+                .get(set_name)
+                .expect("Already checked for missing sets.");
 
-        // lets say set shortcut is foo/bar and file baz
-        // transfer looks something like this: /monja/set/baz -> /home/xx/foo/bar/baz
-        // here, the source is /monja/set/, dest is /home/xx/foo/bar/, and file is baz
-        // incidentally, local::FilePath is foo/bar/baz
+            // lets say set shortcut is foo/bar and file baz
+            // transfer looks something like this: /monja/set/baz -> /home/xx/foo/bar/baz
+            // here, the source is /monja/set/, dest is /home/xx/foo/bar/, and file is baz
+            // incidentally, local::FilePath is foo/bar/baz
 
-        rsync(
-            set.root.as_ref(),
-            &set.shortcut.to_path(profile.local_root.as_ref()),
-            file_paths.iter().map(|p| p.path_in_set.to_path("")),
-        )
-        .map_err(PullError::Rsync)?;
+            rsync(
+                set.root.as_ref(),
+                &set.shortcut.to_path(profile.local_root.as_ref()),
+                file_paths.iter().map(|p| p.path_in_set.to_path("")),
+                opts,
+            )
+            .map_err(PullError::Rsync)?;
+        }
+
+        index
+            .save(&profile.local_root)
+            .map_err(|_| PullError::FileIndex)?;
     }
 
-    index
-        .save(&profile.local_root)
-        .map_err(|_| PullError::FileIndex)?;
-
     let files_to_pull = convert_set_file_result(&profile.config.target_sets, files_to_pull);
-    Ok(PullSuccess {
+    return Ok(PullSuccess {
         files_pulled: files_to_pull,
-    })
+    });
+
+    // the code ends up being the cleanest when files takes ownership of its data from repo,
+    // since that data becomes part of the result.
+    // in order to take ownership, we .remove() them (from sets).
+    // if we instead used get(), we'd have to do a lot of cloning.
+    // the only problem is we partial move the set, so it's not like we can store it anywhere directly.
+    // instead, we just move out the rest of the set info we need, at the cost of a small hashmap.
+    struct SetInfo {
+        root: AbsolutePath,
+        shortcut: repo::SetShortcut,
+    }
 }

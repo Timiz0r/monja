@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, path::PathBuf};
+use std::{collections::HashMap, io};
 
 use crate::{AbsolutePath, MonjaProfile, SetName, repo};
 
