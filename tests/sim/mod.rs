@@ -42,7 +42,7 @@ impl Simulator {
             .unwrap();
 
         let profile_config = MonjaProfileConfig {
-            monja_dir: repo_dir.path().to_path_buf(),
+            repo_dir: repo_dir.path().to_path_buf(),
             target_sets: Vec::new(),
             new_file_set: None,
         };

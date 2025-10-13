@@ -35,7 +35,7 @@ pub type RepoStateInitializationError = repo::StateInitializationError;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MonjaProfileConfig {
-    pub monja_dir: PathBuf,
+    pub repo_dir: PathBuf,
     pub target_sets: Vec<SetName>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_file_set: Option<SetName>,
@@ -84,7 +84,7 @@ impl MonjaProfile {
     ) -> Result<MonjaProfile, std::io::Error> {
         Ok(MonjaProfile {
             local_root,
-            repo_root: AbsolutePath::for_existing_path(&config.monja_dir)?,
+            repo_root: AbsolutePath::for_existing_path(&config.repo_dir)?,
             data_root,
             config,
         })
