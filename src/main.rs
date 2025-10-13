@@ -1,6 +1,11 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
-use monja::{AbsolutePath, ExecutionOptions, MonjaProfile};
+use std::path::{Path, PathBuf};
+
+use monja::{
+    AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName,
+    operation::status::local_status,
+};
 
 use clap::{Args, Parser, Subcommand, command};
 
@@ -22,7 +27,7 @@ enum Commands {
     // TODO: maybe split between init local and setup repo
     // TODO: note to self: make first set named after hostname
     Init(InitCommand),
-    LocalStatus(LocalStatusCommand),
+    LocalStatus(StatusCommand),
     ChangeProfile(ChangeProfileCommand),
 }
 
@@ -95,7 +100,9 @@ impl PushCommand {
         let result = result?;
 
         if !result.files_pushed.is_empty() {
-            println!("Files pushed, as grouped under their corresponding sets:");
+            println!(
+                "Files pushed (including unchanged), as grouped under their corresponding sets:"
+            );
             for (set_name, file_paths) in result.files_pushed.iter() {
                 eprintln!("\tSet: {}", set_name);
                 for path in file_paths {
@@ -129,7 +136,9 @@ impl PullCommand {
         let result = result?;
 
         if !result.files_pulled.is_empty() {
-            println!("Files to be pulled, as grouped under their corresponding sets:");
+            println!(
+                "Files to be pulled (including unchanged), as grouped under their corresponding sets:"
+            );
             for (set_name, file_paths) in result.files_pulled.into_iter() {
                 eprintln!("\tSet: {}", set_name);
                 for path in file_paths {
@@ -153,10 +162,84 @@ impl InitCommand {
 }
 
 #[derive(Args)]
-struct LocalStatusCommand {}
-impl LocalStatusCommand {
-    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
-        todo!()
+struct StatusCommand {
+    location: Option<PathBuf>,
+
+    #[command(flatten)]
+    filter: Option<StatusFilter>,
+}
+
+#[derive(Args)]
+#[group(required = false, multiple = true)]
+struct StatusFilter {
+    #[arg(long)]
+    untracked: bool,
+    #[arg(long)]
+    sets_missing: bool,
+    #[arg(long)]
+    files_missing: bool,
+    #[arg(long)]
+    to_push: bool,
+}
+impl StatusCommand {
+    fn execute(&self, profile: MonjaProfile, _: ExecutionOptions) -> anyhow::Result<()> {
+        let status = local_status(&profile)?;
+
+        let location = self
+            .location
+            .as_deref()
+            .unwrap_or(".".as_ref())
+            .canonicalize()?;
+
+        if self.filter.as_ref().is_none_or(|f| f.sets_missing) {
+            print(
+                "Sets missing, as well as the files that currently require them:",
+                status.files_with_missing_sets,
+                &location,
+            );
+        }
+
+        if self.filter.as_ref().is_none_or(|f| f.files_missing) {
+            print(
+                "Files missing, as grouped under the sets they were expected to be in:",
+                status.missing_files,
+                &location,
+            );
+        }
+
+        if self.filter.as_ref().is_none_or(|f| f.untracked) {
+            println!("Untracked files:");
+            for path in status.untracked_files.into_iter() {
+                println!("{:?}", path);
+            }
+        }
+
+        if self.filter.as_ref().is_none_or(|f| f.to_push) {
+            print(
+                "Files to push (including unchanged), as grouped under their corresponding sets:",
+                status.files_to_push,
+                &location,
+            );
+        }
+
+        return Ok(());
+
+        fn print(message: &str, info: Vec<(SetName, Vec<LocalFilePath>)>, location: &Path) {
+            println!("{}", message);
+            for (set_name, file_paths) in info {
+                println!("\tSet: {}", set_name);
+                for path in file_paths {
+                    let abs = {
+                        let this: &Path = &path;
+                        this
+                    }
+                    .canonicalize();
+                    if abs.is_ok_and(|p| p.starts_with(location)) {
+                        println!("\t\t{:?}", path);
+                    }
+                }
+            }
+        }
     }
 }
 

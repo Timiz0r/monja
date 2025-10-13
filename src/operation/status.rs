@@ -1,5 +1,47 @@
-use crate::{ExecutionOptions, MonjaProfile};
+use thiserror::Error;
 
-pub fn local_status(_profile: &MonjaProfile, _opts: &ExecutionOptions) {
-    todo!()
+use crate::{LocalFilePath, MonjaProfile, convert_set_file_result, local, repo};
+
+#[derive(Error, Debug)]
+pub enum StatusError {
+    #[error("Unable to initialize repo state.")]
+    RepoStateInitialization(Vec<repo::StateInitializationError>),
+    #[error("Unable to initialize local state.")]
+    LocalStateInitialization(#[from] local::StateInitializationError),
+}
+
+#[derive(Debug)]
+pub struct Status {
+    pub files_to_push: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub untracked_files: Vec<LocalFilePath>,
+    pub files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+}
+
+pub fn local_status(profile: &MonjaProfile) -> Result<Status, StatusError> {
+    let repo =
+        repo::initialize_full_state(profile).map_err(StatusError::RepoStateInitialization)?;
+    let local_state = local::retrieve_state(profile, &repo)?;
+
+    let files_to_push =
+        convert_set_file_result(&profile.config.target_sets, local_state.files_to_push);
+
+    let files_with_missing_sets = convert_set_file_result(
+        &profile.config.target_sets,
+        local_state.files_with_missing_sets,
+    );
+
+    let missing_files =
+        convert_set_file_result(&profile.config.target_sets, local_state.missing_files);
+
+    Ok(Status {
+        files_to_push,
+        files_with_missing_sets,
+        missing_files,
+        untracked_files: local_state
+            .untracked_files
+            .into_iter()
+            .map(|f| f.into())
+            .collect(),
+    })
 }

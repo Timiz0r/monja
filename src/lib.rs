@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
     io::Write,
+    ops::Deref,
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -24,8 +25,8 @@ pub mod operation {
 }
 
 pub use crate::{
-    operation::pull::*, operation::push::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
-    repo::SetShortcutError,
+    operation::pull::*, operation::push::*, operation::status::*, repo::SetConfig,
+    repo::SetConfigError, repo::SetName, repo::SetShortcutError,
 };
 
 //note that file index error is internal implementation detail
@@ -95,6 +96,7 @@ impl MonjaProfile {
 // one alternative option is to expose a trait here, implemented main side
 // another alternative is to use an object mapper like o2o
 #[derive(Args)]
+#[group(multiple = true)]
 pub struct ExecutionOptions {
     #[arg(short, long = "verbose", action = clap::ArgAction::Count)]
     pub verbosity: u8,
@@ -128,7 +130,7 @@ impl AsRef<Path> for AbsolutePath {
 }
 
 // the original types use private dependency RelativePathBuf, so we add these types to get around it
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct LocalFilePath(PathBuf);
 impl From<LocalFilePath> for PathBuf {
     fn from(value: LocalFilePath) -> Self {
@@ -142,13 +144,34 @@ impl From<local::FilePath> for LocalFilePath {
     }
 }
 
-impl AsRef<Path> for LocalFilePath {
-    fn as_ref(&self) -> &Path {
+impl Deref for LocalFilePath {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-#[derive(Debug)]
+impl<T> AsRef<T> for LocalFilePath
+where
+    T: ?Sized,
+    <Self as Deref>::Target: AsRef<T>,
+{
+    fn as_ref(&self) -> &T {
+        self.deref().as_ref()
+    }
+}
+
+impl PartialEq<Path> for LocalFilePath {
+    fn eq(&self, other: &Path) -> bool {
+        other == {
+            let this: &Path = self;
+            this
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct RepoFilePath {
     pub path_in_set: PathBuf,
     pub local_path: PathBuf,

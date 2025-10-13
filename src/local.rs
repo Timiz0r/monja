@@ -9,7 +9,7 @@ use thiserror::Error;
 
 pub(crate) struct LocalState {
     pub files_to_push: HashMap<repo::SetName, Vec<FilePath>>,
-    pub _untracked_files: Vec<FilePath>,
+    pub untracked_files: Vec<FilePath>,
     pub files_with_missing_sets: HashMap<repo::SetName, Vec<FilePath>>,
     pub missing_files: HashMap<repo::SetName, Vec<FilePath>>,
 }
@@ -56,7 +56,7 @@ pub(crate) fn retrieve_state(
 
     Ok(LocalState {
         files_to_push,
-        _untracked_files: untracked_files,
+        untracked_files,
         files_with_missing_sets,
         missing_files,
     })

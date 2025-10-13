@@ -36,6 +36,16 @@ just to avoid potentially wasting time on something that won't make it in.
 These don't necessarily need an issue and can just be worked on whenever -- though issues are certainly handy.
 Of course, keep in mind that creating an issue may be adviseable for large-scoped changes -- as per above, to avoid time wastage.
 
+## Features on the todo list
+* Packages
+* Permissions
+* Diff/merge between local and sets
+
+The thoughts on these should eventually make it to an issue somewhere.
+Package support is the main feature to add.
+Permissions aren't too important. Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
+Diff/merge is a QoL thing.
+
 ## Design
 Probably the most incomplete section of them all!
 
