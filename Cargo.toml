@@ -8,6 +8,7 @@ edition = "2024"
 anyhow = "1.0.100"
 # though, just because there's no strong reason to overcomplicate, there is one type in the monja crate that uses clap
 clap = { version = "4.5.48", features = ["cargo", "derive"] }
+xdg = "3.0.0"
 
 # monja-only. aka don't export them! not a big deal either way, but it's the goal.
 ignore = "0.4.23"

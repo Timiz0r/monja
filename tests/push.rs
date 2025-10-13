@@ -288,7 +288,7 @@ fn index_based_directory_traversal_absolute() -> Result<()> {
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     // a bit of a leaky implementation detail, but oh well
-    let index_path = sim.profile()?.local_root.as_ref().join(".monja-index.toml");
+    let index_path = sim.profile()?.data_root.as_ref().join("monja-index.toml");
     assert_that!(index_path.exists(), is_true());
 
     let replacement_index = r#""/etc/passwd" = "simple""#;
@@ -320,7 +320,7 @@ fn index_based_directory_traversal_relative() -> Result<()> {
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     // a bit of a leaky implementation detail, but oh well
-    let index_path = sim.profile()?.local_root.as_ref().join(".monja-index.toml");
+    let index_path = sim.profile()?.data_root.as_ref().join("monja-index.toml");
     assert_that!(index_path.exists(), is_true());
 
     let foo_path = sim.profile()?.local_root.as_ref().join("../foo");

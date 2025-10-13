@@ -93,6 +93,13 @@ TODO: this will come a bit later after we've implemented better push and cleanup
             * probably both. two modes for pull, and only scan for clean command.
             * so one mode will basically be a dif between the old index and new index, where we can clean anything that was in old but not in new
             * and the other mode checks disk.
+        * decision:
+            * on pull, warn if there are files that were in old index no longer in new index
+            * start storing an old index in old-index.toml, which will allow index-diff-based cleaning after pull has been run
+            * don't need to add a flag for force clean for now, since likely never used
+            * have full-clean and quick-clean
+                * also add file selection support, where a subset of the diff can be selected? for both modes
+            * 
     * since will be run under the assumption all files have right owner and group, also need a mode that can be invoked under sudo (explicit or implicit?) to force ownership
         * will failfast instead of partial syncing
         * will support a way to skip

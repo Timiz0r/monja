@@ -121,7 +121,7 @@ impl PullCommand {
                 "Sets needed by the profile are missing from the repo: {:?}",
                 missing_sets
             );
-            eprintln!("Verify that the right set of sets in '.monja-profile.toml' are present.");
+            eprintln!("Verify that the right set of sets in 'monja-profile.toml' are present.");
             // probably something better to use, but we don't want to double log with the below `result?`.
             return Err(anyhow::Error::msg("Failed to pull."));
         }
@@ -169,16 +169,21 @@ impl ChangeProfileCommand {
 }
 
 fn main() -> anyhow::Result<()> {
-    let mut profile_path =
-        std::env::home_dir().expect("We got bigger problems if there's no home.");
-    let local_root = AbsolutePath::for_existing_path(&profile_path)?;
-    profile_path.push(".monja-profile.toml");
-    let profile_path = AbsolutePath::for_existing_path(&profile_path)?;
+    let base = xdg::BaseDirectories::with_prefix("monja");
 
-    let profile = monja::MonjaProfile::from_config(
-        monja::MonjaProfileConfig::load(&profile_path)?,
-        local_root,
-    )?;
+    let data_root = base
+        .get_data_home()
+        .expect("We got bigger problems if there's no home.");
+    let data_root = AbsolutePath::for_existing_path(&data_root)?;
+
+    let profile_config_path =
+        AbsolutePath::for_existing_path(&base.place_config_file("monja-profile.toml")?)?;
+    let profile_config = monja::MonjaProfileConfig::load(&profile_config_path)?;
+
+    let local_root = std::env::home_dir().expect("We got bigger problems if there's no home.");
+    let local_root = AbsolutePath::for_existing_path(&local_root)?;
+
+    let profile = monja::MonjaProfile::from_config(profile_config, local_root, data_root)?;
 
     let cli = Cli::parse();
     cli.command.execute(profile, cli.opts)

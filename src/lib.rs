@@ -43,11 +43,11 @@ pub struct MonjaProfileConfig {
 
 #[derive(Error, Debug)]
 pub enum MonjaProfileConfigError {
-    #[error("Unable to deserialize .monja-profile.toml.")]
+    #[error("Unable to deserialize monja-profile.toml.")]
     Deserialization(#[from] toml::de::Error),
-    #[error("Unable to serialize .monja-profile.toml.")]
+    #[error("Unable to serialize monja-profile.toml.")]
     Serialization(#[from] toml::ser::Error),
-    #[error("Unable to save/load .monja-profile.toml.")]
+    #[error("Unable to save/load monja-profile.toml.")]
     Io(#[from] std::io::Error),
 }
 
@@ -71,6 +71,7 @@ impl MonjaProfileConfig {
 pub struct MonjaProfile {
     pub local_root: AbsolutePath,
     pub repo_root: AbsolutePath,
+    pub data_root: AbsolutePath,
 
     pub config: MonjaProfileConfig,
 }
@@ -79,15 +80,20 @@ impl MonjaProfile {
     pub fn from_config(
         config: MonjaProfileConfig,
         local_root: AbsolutePath,
+        data_root: AbsolutePath,
     ) -> Result<MonjaProfile, std::io::Error> {
         Ok(MonjaProfile {
             local_root,
             repo_root: AbsolutePath::for_existing_path(&config.monja_dir)?,
+            data_root,
             config,
         })
     }
 }
 
+// would ideally not depend on clap in this crate, but it's not worth the effort otherwise
+// one alternative option is to expose a trait here, implemented main side
+// another alternative is to use an object mapper like o2o
 #[derive(Args)]
 pub struct ExecutionOptions {
     #[arg(short, long = "verbose", action = clap::ArgAction::Count)]
@@ -159,26 +165,18 @@ impl From<repo::FilePath> for RepoFilePath {
 
 // not actually sure this is the best way, but it probably works
 // and we can just test on windows if we ever support it
-static MONJA_REPO_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
+static MONJA_SPECIAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
     HashSet::from([
         OsString::from(".monja-set.toml"),
         OsString::from(".monja-dir.toml"),
-    ])
-});
-static MONJA_LOCAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
-    HashSet::from([
-        OsString::from(".monja-profile.toml"),
-        OsString::from(".monja-index.toml"),
+        OsString::from("monja-profile.toml"),
+        OsString::from("monja-index.toml"),
         OsString::from(".monjaignore.toml"),
     ])
 });
-pub fn is_monja_repo_file(path: &Path) -> bool {
+pub fn is_monja_special_file(path: &Path) -> bool {
     path.file_name()
-        .is_some_and(|f: &OsStr| MONJA_REPO_FILES.contains(f))
-}
-pub fn is_monja_local_file(path: &Path) -> bool {
-    path.file_name()
-        .is_some_and(|f: &OsStr| MONJA_LOCAL_FILES.contains(f))
+        .is_some_and(|f: &OsStr| MONJA_SPECIAL_FILES.contains(f))
 }
 
 // keeping as io result because basically everything is io result
@@ -223,9 +221,11 @@ pub(crate) fn rsync(
     }
 
     let status = child.wait_with_output()?;
-    println!("Finished rsync with status {}", status.status);
-    // TODO: would be nice to return this instead?
-    std::io::stderr().write_all(&status.stderr)?;
+    if opts.verbosity > 0 {
+        println!("Finished rsync with status {}", status.status);
+        // TODO: would be nice to return this instead?
+        std::io::stderr().write_all(&status.stderr)?;
+    }
 
     match status.status.success() {
         true => Ok(()),

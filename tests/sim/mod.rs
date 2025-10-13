@@ -20,6 +20,8 @@ use walkdir::WalkDir;
 pub(crate) struct Simulator {
     repo_dir: TempDir,
     local_dir: TempDir,
+    data_dir: TempDir,
+
     profile_path: AbsolutePath,
     opts: ExecutionOptions,
 }
@@ -34,6 +36,10 @@ impl Simulator {
             .prefix("MonjaRepo")
             .tempdir_in(&local_dir)
             .unwrap();
+        let data_dir = tempfile::Builder::new()
+            .prefix("MonjaData")
+            .tempdir_in(&local_dir)
+            .unwrap();
 
         let profile_config = MonjaProfileConfig {
             monja_dir: repo_dir.path().to_path_buf(),
@@ -41,18 +47,19 @@ impl Simulator {
             new_file_set: None,
         };
 
-        let profile_path = local_dir.path().join(".monja-profile.toml");
+        let profile_path = local_dir.path().join("monja-profile.toml");
         // AbsolutePath requires that the path exist, so we'll make it first.
         // typically, the profile should already be user-created in practice, so this behavior is desireable.
         // also, since this is a fresh dir, no overwriting happens here.
         fs::write(&profile_path, "").unwrap();
         let profile_path =
-            AbsolutePath::for_existing_path(&local_dir.path().join(".monja-profile.toml")).unwrap();
+            AbsolutePath::for_existing_path(&local_dir.path().join("monja-profile.toml")).unwrap();
         profile_config.save(&profile_path).unwrap();
 
         Simulator {
             repo_dir,
             local_dir,
+            data_dir,
             profile_path,
             opts: ExecutionOptions {
                 verbosity: 0,
@@ -65,12 +72,14 @@ impl Simulator {
         // we previously stored an instance of the profile
         // however, we changed it to reading a file to get coverage of the code paths
         let local_root = AbsolutePath::for_existing_path(self.local_dir.path()).unwrap();
+        let data_root = AbsolutePath::for_existing_path(self.data_dir.path()).unwrap();
 
         // NOTE: MonjaProfile::from_config just gives an io::Error, but that's getting into'd into a MonjaProfileConfigError
         // which works fine for our case, but don't be misled!
         Ok(MonjaProfile::from_config(
             MonjaProfileConfig::load(&self.profile_path)?,
             local_root,
+            data_root,
         )?)
     }
 
@@ -183,7 +192,7 @@ impl OperationHandler for LocalValidation {
             .map(|e| e.unwrap())
             .filter(|e| e.file_type().is_file())
             .map(|e| e.into_path())
-            .filter(|p| !monja::is_monja_local_file(p))
+            .filter(|p| !monja::is_monja_special_file(p))
             .filter(|p| !p.starts_with(&self.repo_root))
             .collect();
 
@@ -228,7 +237,7 @@ impl OperationHandler for SetValidation {
             .map(|e| e.unwrap())
             .filter(|e| e.file_type().is_file())
             .map(|e| e.into_path())
-            .filter(|p| !monja::is_monja_repo_file(p))
+            .filter(|p| !monja::is_monja_special_file(p))
             .collect();
 
         expect_that!(repo_files, container_eq(self.general_validation.files));

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io};
 
-use crate::{AbsolutePath, MonjaProfile, SetName, repo};
+use crate::{MonjaProfile, SetName, repo};
 
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
@@ -18,7 +18,7 @@ pub(crate) fn retrieve_state(
     profile: &MonjaProfile,
     repo: &repo::RepoState,
 ) -> Result<LocalState, StateInitializationError> {
-    let mut index = FileIndex::load(&profile.local_root)?;
+    let mut index = FileIndex::load(profile)?;
 
     let mut files_to_push = HashMap::with_capacity(repo.sets.len());
     let mut untracked_files = Vec::new();
@@ -69,8 +69,8 @@ pub(crate) struct FileIndex {
 }
 
 impl FileIndex {
-    fn load(root: &AbsolutePath) -> Result<FileIndex, FileIndexError> {
-        let index_path = root.as_ref().join(".monja-index.toml");
+    fn load(profile: &MonjaProfile) -> Result<FileIndex, FileIndexError> {
+        let index_path = profile.data_root.as_ref().join("monja-index.toml");
         if !index_path.exists() {
             return Ok(FileIndex {
                 set_mapping: HashMap::new(),
@@ -82,9 +82,9 @@ impl FileIndex {
         toml::from_slice(&index).map_err(|e| e.into())
     }
 
-    pub(crate) fn save(&self, root: &AbsolutePath) -> Result<(), FileIndexError> {
+    pub(crate) fn save(&self, profile: &MonjaProfile) -> Result<(), FileIndexError> {
         std::fs::write(
-            root.as_ref().join(".monja-index.toml"),
+            profile.data_root.as_ref().join("monja-index.toml"),
             toml::to_string(self)?,
         )
         .map_err(|e| e.into())
@@ -145,17 +145,17 @@ impl TryFrom<std::path::PathBuf> for FilePath {
 pub enum StateInitializationError {
     #[error("Unable to read the state of the local directory.")]
     Io(#[from] std::io::Error),
-    #[error("Unable to read .monja-index.toml.")]
+    #[error("Unable to read monja-index.toml.")]
     FileIndex(#[from] FileIndexError),
 }
 
 #[derive(Error, Debug)]
 pub enum FileIndexError {
-    #[error("Unable to read the state of .monja-index.toml.")]
+    #[error("Unable to read the state of monja-index.toml.")]
     Io(#[from] std::io::Error),
-    #[error("Unable to deserialize .monja-index.toml.")]
+    #[error("Unable to deserialize monja-index.toml.")]
     Deserialization(#[from] toml::de::Error),
-    #[error("Unable to serialize .monja-index.toml.")]
+    #[error("Unable to serialize monja-index.toml.")]
     Serialization(#[from] toml::ser::Error),
 }
 
@@ -173,7 +173,7 @@ fn walk(profile: &MonjaProfile) -> impl Iterator<Item = io::Result<FilePath>> {
         // note that WalkBuilder's filter will filter out directories from being walked, so we instead filter here
         .filter(|e| e.path().is_file())
         .filter(move |e| !e.path().starts_with(repo_root))
-        .filter(|e| !crate::is_monja_local_file(e.path()))
+        .filter(|e| !crate::is_monja_special_file(e.path()))
         .map(move |entry| {
             // would be convenient to map path out earlier, but that requires a clone
             // because the path comes from a dropped Entry.
