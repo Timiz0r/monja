@@ -1,3 +1,5 @@
+use std::fs;
+
 use googletest::prelude::*;
 
 use crate::sim::{Simulator, set_names};
@@ -45,6 +47,23 @@ fn simple_set() -> Result<()> {
         end
         file "blueberry" "tart"
     };
+
+    Ok(())
+}
+
+#[gtest]
+fn empty_set() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+    };
+
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    expect_that!(pull_result.files_pulled, len(eq(0)));
 
     Ok(())
 }
@@ -319,6 +338,12 @@ fn dry_run() -> Result<()> {
 
     fs_operation! { LocalValidation, sim,
     };
+
+    // slightly leaky. it's an external behavior that we hide from the user, hence this method of testing
+    expect_that!(
+        fs::exists(sim.profile()?.data_root.as_ref().join("monja-index.toml")),
+        ok(is_false())
+    );
 
     Ok(())
 }

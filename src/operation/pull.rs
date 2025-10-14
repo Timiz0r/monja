@@ -83,10 +83,11 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
 
     if !opts.dry_run {
         for set_name in profile.config.target_sets.iter() {
+            let Some(file_paths) = files_to_pull.get(set_name) else {
+                // would happen if there are no files to pull for the set
+                continue;
+            };
             let set = set_info
-                .get(set_name)
-                .expect("Already checked for missing sets.");
-            let file_paths = files_to_pull
                 .get(set_name)
                 .expect("Already checked for missing sets.");
 

@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::path::Path;
 
 use googletest::prelude::*;
 
@@ -32,34 +32,55 @@ fn status() -> Result<()> {
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     sim.rem_set(SetName("set1".into()));
-
     fs_operation! { SetManipulation, sim, "set2",
         remfile "set2b"
     };
-
-    fs::write(
-        sim.profile()?.local_root.as_ref().join("notinrepo"),
-        b"notinrepo",
-    )?;
+    fs_operation! { LocalManipulation, sim,
+        file "notinrepo" "notinrepo"
+    };
 
     let status = monja::local_status(&sim.profile()?)?;
+    expect_that!(status.files_to_push, {
+        (
+            pat!(SetName("set2")),
+            unordered_elements_are![eq(Path::new("set2a"))],
+        )
+    });
+    expect_that!(status.files_with_missing_sets, {
+        (
+            pat!(SetName("set1")),
+            unordered_elements_are![eq(Path::new("set1"))],
+        )
+    });
+    expect_that!(status.missing_files, {
+        (
+            pat!(SetName("set2")),
+            unordered_elements_are![eq(Path::new("set2b"))],
+        )
+    });
+    expect_that!(status.untracked_files, { eq(Path::new("notinrepo")) });
 
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set2"]),
+        ..old
+    });
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    let status = monja::local_status(&sim.profile()?)?;
     expect_that!(
-        status.files_to_push,
-        [(pat!(SetName("set2")), elements_are![eq(Path::new("set2a"))])]
+        status.untracked_files,
+        {
+            eq(Path::new("notinrepo")),
+            eq(Path::new("set1")),
+            eq(Path::new("set2b"))
+        }
     );
-
     expect_that!(
-        status.files_with_missing_sets,
-        [(pat!(SetName("set1")), elements_are![eq(Path::new("set1"))])]
+        status.old_files_since_last_pull,
+        {
+            eq(Path::new("set1")),
+            eq(Path::new("set2b"))
+        }
     );
-
-    expect_that!(
-        status.missing_files,
-        [(pat!(SetName("set2")), elements_are![eq(Path::new("set2b"))])]
-    );
-
-    expect_that!(status.untracked_files, [eq(Path::new("notinrepo"))]);
 
     Ok(())
 }

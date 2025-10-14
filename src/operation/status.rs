@@ -13,9 +13,10 @@ pub enum StatusError {
 #[derive(Debug)]
 pub struct Status {
     pub files_to_push: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-    pub untracked_files: Vec<LocalFilePath>,
     pub files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
     pub missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub untracked_files: Vec<LocalFilePath>,
+    pub old_files_since_last_pull: Vec<LocalFilePath>,
 }
 
 pub fn local_status(profile: &MonjaProfile) -> Result<Status, StatusError> {
@@ -34,14 +35,23 @@ pub fn local_status(profile: &MonjaProfile) -> Result<Status, StatusError> {
     let missing_files =
         convert_set_file_result(&profile.config.target_sets, local_state.missing_files);
 
+    let old_files_since_last_pull = local_state
+        .old_files_since_last_pull
+        .into_iter()
+        .map(|f| f.into())
+        .collect();
+
+    let untracked_files = local_state
+        .untracked_files
+        .into_iter()
+        .map(|f| f.into())
+        .collect();
+
     Ok(Status {
         files_to_push,
         files_with_missing_sets,
         missing_files,
-        untracked_files: local_state
-            .untracked_files
-            .into_iter()
-            .map(|f| f.into())
-            .collect(),
+        old_files_since_last_pull,
+        untracked_files,
     })
 }

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use monja::{
-    AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName,
+    AbsolutePath, CleanMode, ExecutionOptions, LocalFilePath, MonjaProfile, SetName, clean,
     operation::status::local_status,
 };
 
@@ -24,8 +24,7 @@ struct Cli {
 enum Commands {
     Push(PushCommand),
     Pull(PullCommand),
-    // TODO: maybe split between init local and setup repo
-    // TODO: note to self: make first set named after hostname
+    Clean(CleanCommand),
     Init(InitCommand),
     LocalStatus(StatusCommand),
     ChangeProfile(ChangeProfileCommand),
@@ -35,15 +34,12 @@ enum Commands {
 impl Commands {
     fn execute(&self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         match self {
-            Commands::Push(push_command) => push_command.execute(profile, opts),
-            Commands::Pull(pull_command) => pull_command.execute(profile, opts),
-            Commands::Init(init_command) => init_command.execute(profile, opts),
-            Commands::LocalStatus(local_status_command) => {
-                local_status_command.execute(profile, opts)
-            }
-            Commands::ChangeProfile(change_profile_command) => {
-                change_profile_command.execute(profile, opts)
-            }
+            Commands::Push(command) => command.execute(profile, opts),
+            Commands::Pull(command) => command.execute(profile, opts),
+            Commands::Clean(command) => command.execute(profile, opts),
+            Commands::Init(command) => command.execute(profile, opts),
+            Commands::LocalStatus(command) => command.execute(profile, opts),
+            Commands::ChangeProfile(command) => command.execute(profile, opts),
         }
     }
 }
@@ -154,6 +150,33 @@ impl PullCommand {
 }
 
 #[derive(Args)]
+struct CleanCommand {
+    // if false, will use index diff from last pull
+    #[arg()]
+    full: bool,
+}
+impl CleanCommand {
+    fn execute(&self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+        let mode = match self.full {
+            true => CleanMode::Full,
+            false => CleanMode::Index,
+        };
+        let clean_result = clean(&profile, &opts, mode)?;
+
+        if !clean_result.files_cleaned.is_empty() {
+            println!("Local files cleaned:");
+            for path in clean_result.files_cleaned.into_iter() {
+                println!("{:?}", path);
+            }
+        } else {
+            println!("No local files cleaned.")
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Args)]
 struct InitCommand {}
 impl InitCommand {
     fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
@@ -210,6 +233,13 @@ impl StatusCommand {
         if self.filter.as_ref().is_none_or(|f| f.untracked) {
             println!("Untracked files:");
             for path in status.untracked_files.into_iter() {
+                println!("{:?}", path);
+            }
+        }
+
+        if self.filter.as_ref().is_none_or(|f| f.untracked) {
+            println!("Files removed from repo since last pull (also found in untracked):");
+            for path in status.old_files_since_last_pull.into_iter() {
                 println!("{:?}", path);
             }
         }

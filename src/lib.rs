@@ -19,14 +19,15 @@ use thiserror::Error;
 pub(crate) mod local;
 pub(crate) mod repo;
 pub mod operation {
+    pub mod clean;
     pub mod pull;
     pub mod push;
     pub mod status;
 }
 
 pub use crate::{
-    operation::pull::*, operation::push::*, operation::status::*, repo::SetConfig,
-    repo::SetConfigError, repo::SetName, repo::SetShortcutError,
+    operation::clean::*, operation::pull::*, operation::push::*, operation::status::*,
+    repo::SetConfig, repo::SetConfigError, repo::SetName, repo::SetShortcutError,
 };
 
 //note that file index error is internal implementation detail
@@ -194,6 +195,7 @@ static MONJA_SPECIAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
         OsString::from(".monja-dir.toml"),
         OsString::from("monja-profile.toml"),
         OsString::from("monja-index.toml"),
+        OsString::from("monja-index-prev.toml"),
         OsString::from(".monjaignore.toml"),
     ])
 });
