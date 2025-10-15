@@ -84,3 +84,60 @@ fn status() -> Result<()> {
 
     Ok(())
 }
+#[gtest]
+fn ignore() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1", "set2"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        file "set1" "set1"
+    };
+
+    fs_operation! { SetManipulation, sim, "set2",
+        file "set2a" "set2a"
+        file "set2b" "set2b"
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    sim.rem_set(SetName("set1".into()));
+    fs_operation! { SetManipulation, sim, "set2",
+        remfile "set2b"
+    };
+    fs_operation! { LocalManipulation, sim,
+        file "notinrepo" "notinrepo"
+    };
+
+    sim.set_ignorefile(
+        "
+set2a
+set1
+set2b
+notinrepo
+    ",
+    );
+
+    let status = monja::local_status(&sim.profile()?)?;
+    // an argument can be made that this should contain files in the index (and don't fall under the other categories),
+    // like when we manually commit files that are in .gitignore.
+    // one reason we're not doing that is because it's hard to do with the ignore crate.
+    // the way to do it would probably be to build an Overrides that contains entries that are in the index and exist in the repo.
+    expect_that!(status.files_to_push, is_empty());
+    expect_that!(status.files_with_missing_sets, is_empty());
+    expect_that!(status.missing_files, is_empty());
+    expect_that!(status.untracked_files, is_empty());
+
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set2"]),
+        ..old
+    });
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    let status = monja::local_status(&sim.profile()?)?;
+    expect_that!(status.old_files_after_last_pull, is_empty());
+
+    Ok(())
+}
