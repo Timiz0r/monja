@@ -15,9 +15,8 @@ pub enum PullError {
     MissingSets(Vec<repo::SetName>),
     #[error("Failed to copy files via rsync.")]
     Rsync(#[source] std::io::Error),
-    #[error("Unable to read monja-index.toml.")]
-    // data structure is internal implementation detail, so just go with this.
-    FileIndex,
+    #[error("Unable to save file index.")]
+    FileIndex(#[from] local::FileIndexError),
 }
 
 #[derive(Debug)]
@@ -105,7 +104,7 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
             .map_err(PullError::Rsync)?;
         }
 
-        index.update(profile).map_err(|_| PullError::FileIndex)?;
+        index.update(profile)?;
     }
 
     let files_to_pull = convert_set_file_result(&profile.config.target_sets, files_to_pull);

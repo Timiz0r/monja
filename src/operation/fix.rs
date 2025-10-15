@@ -11,8 +11,8 @@ pub enum FixError {
     #[error("Set not found in repo.")]
     SetNotFound(repo::SetName),
 
-    #[error("Failed to load the local index.")]
-    Index(#[from] local::FileIndexError),
+    #[error("Failed to load monja-index.toml.")]
+    FileIndex(#[from] local::FileIndexError),
 
     // TODO: refine all of our Io errors
     #[error("Failed to copy local file to repo.")]

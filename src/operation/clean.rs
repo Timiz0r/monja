@@ -2,7 +2,11 @@ use std::fs;
 
 use thiserror::Error;
 
-use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, local, repo};
+use crate::{
+    ExecutionOptions, LocalFilePath, MonjaProfile,
+    local::{self, FileIndexError},
+    repo,
+};
 
 #[derive(Error, Debug)]
 pub enum CleanError {
@@ -12,12 +16,8 @@ pub enum CleanError {
     RepoStateInitialization(Vec<repo::StateInitializationError>),
     #[error("Failed to delete file.")]
     Io(#[source] std::io::Error),
-
-    // data structure is internal implementation detail, so just go with this.
-    #[error("Unable to read monja-index.toml.")]
-    CurrentFileIndex,
-    #[error("Unable to read monja-index-prev.toml.")]
-    PreviousFileIndex,
+    #[error("Unable to load an index file.")]
+    FileIndex(#[from] FileIndexError),
 }
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ fn index_clean(
     profile: &MonjaProfile,
     opts: &ExecutionOptions,
 ) -> Result<CleanSuccess, CleanError> {
-    let files_to_clean = local::old_files_since_last_pull(profile).map_err(convert_index_error)?;
+    let files_to_clean = local::old_files_since_last_pull(profile)?;
 
     if !opts.dry_run {
         for file in files_to_clean.iter() {
@@ -61,12 +61,7 @@ fn index_clean(
 fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSuccess, CleanError> {
     let repo = repo::initialize_full_state(profile).map_err(CleanError::RepoStateInitialization)?;
 
-    let local_state = local::retrieve_state(profile, &repo).map_err(|e| match e {
-        local::StateInitializationError::FileIndex(file_index_error) => {
-            convert_index_error(file_index_error)
-        }
-        e => e.into(),
-    })?;
+    let local_state = local::retrieve_state(profile, &repo)?;
 
     let mut files_cleaned = Vec::with_capacity(
         local_state.missing_files.len()
@@ -92,19 +87,4 @@ fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSu
     // deref coercion to Path
     files_cleaned.sort_by(|l: &LocalFilePath, r: &LocalFilePath| l.cmp(r));
     Ok(CleanSuccess { files_cleaned })
-}
-
-// TODO: changed mind. just use these
-fn convert_index_error(e: local::FileIndexError) -> CleanError {
-    use local::IndexKind::*;
-    match e {
-        local::FileIndexError::Io(Current, _) => CleanError::CurrentFileIndex,
-        local::FileIndexError::Io(Previous, _) => CleanError::PreviousFileIndex,
-
-        local::FileIndexError::Deserialization(Current, _) => CleanError::CurrentFileIndex,
-        local::FileIndexError::Deserialization(Previous, _) => CleanError::PreviousFileIndex,
-
-        local::FileIndexError::Serialization(Current, _) => CleanError::CurrentFileIndex,
-        local::FileIndexError::Serialization(Previous, _) => CleanError::PreviousFileIndex,
-    }
 }
