@@ -175,7 +175,7 @@ pub enum SetShortcutError {
 #[derive(Error, Debug)]
 pub enum StateInitializationError {
     #[error("Unable to read the state of the repo.")]
-    Io(#[from] std::io::Error),
+    ReadSetDirs(#[source] std::io::Error),
     #[error("Unable to convert dir name into set name: {0:?}")]
     NonUtf8Path(std::ffi::OsString),
     #[error("Set shortcut is invalid.")]
@@ -192,15 +192,15 @@ pub(crate) fn initialize_full_state(
     profile: &MonjaProfile,
 ) -> Result<RepoState, Vec<StateInitializationError>> {
     // while we'll prefer to collect errors into a vector, there's no point in continuing if we can't read this dir.
-    let read_dir =
-        fs::read_dir(&profile.repo_root).map_err(|e| vec![StateInitializationError::Io(e)])?;
+    let read_dir = fs::read_dir(&profile.repo_root)
+        .map_err(|e| vec![StateInitializationError::ReadSetDirs(e)])?;
 
     let mut set_info = Vec::new();
     let mut errors = Vec::new();
 
     for result in read_dir {
         match result {
-            Err(err) => errors.push(err.into()),
+            Err(err) => errors.push(StateInitializationError::ReadSetDirs(err)),
             Ok(e) if e.path().is_dir() => {
                 match e.file_name().into_string() {
                     Ok(str) => set_info.push((SetName(str), e.path())),

@@ -76,11 +76,12 @@ impl Simulator {
 
         // NOTE: MonjaProfile::from_config just gives an io::Error, but that's getting into'd into a MonjaProfileConfigError
         // which works fine for our case, but don't be misled!
-        Ok(MonjaProfile::from_config(
+        MonjaProfile::from_config(
             MonjaProfileConfig::load(&self.profile_path)?,
             local_root,
             data_root,
-        )?)
+        )
+        .map_err(MonjaProfileConfigError::Read)
     }
 
     pub(crate) fn execution_options(&self) -> &ExecutionOptions {

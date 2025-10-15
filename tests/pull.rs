@@ -288,7 +288,7 @@ fn missing_repo_folder() -> Result<()> {
         ..sim.profile()?
     };
     let result = monja::pull(&profile, sim.execution_options());
-    let specific_error = contains(pat!(RepoStateInitializationError::Io(..)));
+    let specific_error = contains(pat!(RepoStateInitializationError::ReadSetDirs(..)));
     expect_that!(
         result,
         err(pat!(PullError::RepoStateInitialization(specific_error)))

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    fs, io,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -92,7 +92,7 @@ impl FileIndex {
             });
         }
 
-        let index = std::fs::read(index_path).map_err(|e| FileIndexError::Io(kind.clone(), e))?;
+        let index = std::fs::read(index_path).map_err(|e| FileIndexError::Read(kind.clone(), e))?;
 
         toml::from_slice(&index).map_err(|e| FileIndexError::Deserialization(kind, e))
     }
@@ -108,7 +108,7 @@ impl FileIndex {
 
         if curr_path.exists() {
             fs::copy(&curr_path, FileIndex::path(profile, &IndexKind::Previous))
-                .map_err(|e| FileIndexError::Io(IndexKind::Previous, e))?;
+                .map_err(FileIndexError::CopyToPrevious)?;
         }
 
         std::fs::write(
@@ -116,7 +116,7 @@ impl FileIndex {
             toml::to_string(self)
                 .map_err(|e| FileIndexError::Serialization(IndexKind::Current, e))?,
         )
-        .map_err(|e| FileIndexError::Io(IndexKind::Current, e))
+        .map_err(|e| FileIndexError::Write(IndexKind::Current, e))
     }
 
     pub(crate) fn save(
@@ -130,7 +130,7 @@ impl FileIndex {
             &path,
             toml::to_string(self).map_err(|e| FileIndexError::Serialization(kind.clone(), e))?,
         )
-        .map_err(|e| FileIndexError::Io(IndexKind::Current, e))
+        .map_err(|e| FileIndexError::Write(IndexKind::Current, e))
     }
 
     pub(crate) fn tracks(&self, local_file: &FilePath) -> bool {
@@ -222,23 +222,36 @@ impl TryFrom<std::path::PathBuf> for FilePath {
 
 #[derive(Error, Debug)]
 pub enum StateInitializationError {
-    #[error("Unable to read the state of the local directory.")]
-    Io(#[from] std::io::Error),
     #[error("Unable to read monja-index.toml.")]
     FileIndex(#[from] FileIndexError),
+
+    // an alternative is to aggregate these and return them as part of the result
+    // instead, am opting for making extra sure we have an accurate picture of local state by failing fast
+    #[error("Error when walking local files.")]
+    LocalWalk(#[from] LocalWalkError),
 }
 
 #[derive(Error, Debug)]
 pub enum FileIndexError {
-    #[error("Unable to read the state of monja-index.toml.")]
-    Io(IndexKind, #[source] std::io::Error),
+    #[error("Unable to read the file index.")]
+    Read(IndexKind, #[source] std::io::Error),
+    #[error("Unable to write the file index.")]
+    Write(IndexKind, #[source] std::io::Error),
+    #[error("Unable to copy the current file index to the previous file index.")]
+    CopyToPrevious(#[source] std::io::Error),
     #[error("Unable to deserialize monja-index.toml.")]
     Deserialization(IndexKind, #[source] toml::de::Error),
     #[error("Unable to serialize monja-index.toml.")]
     Serialization(IndexKind, #[source] toml::ser::Error),
 }
 
-fn walk(profile: &MonjaProfile) -> impl Iterator<Item = io::Result<FilePath>> {
+#[derive(Error, Debug)]
+#[error("Error when walking local files.")]
+// this will also be a rare case of using anyhow in this crate (we use it plenty in main).
+// we want to hide the ignore crate's details.
+pub struct LocalWalkError(#[from] anyhow::Error);
+
+fn walk(profile: &MonjaProfile) -> impl Iterator<Item = Result<FilePath, LocalWalkError>> {
     let local_root = &profile.local_root;
     let repo_root = &profile.repo_root;
     let walker = WalkBuilder::new(local_root)
@@ -248,14 +261,21 @@ fn walk(profile: &MonjaProfile) -> impl Iterator<Item = io::Result<FilePath>> {
         .hidden(false)
         .build();
     walker
-        .flatten()
-        // note that WalkBuilder's filter will filter out directories from being walked, so we instead filter here
-        .filter(|e| e.path().is_file())
-        .filter(move |e| !e.path().starts_with(repo_root))
-        .filter(|e| !crate::is_monja_special_file(e.path()))
+        // not returning a Result<Iter, ...> because we we're opting to fail fast on the first walk error.
+        // using map_or in this way is the only way I can think of at the moment
+        .filter(|r| r.as_ref().map_or(true, |e| e.path().is_file()))
+        .filter(move |r| {
+            r.as_ref()
+                .map_or(true, |e| !e.path().starts_with(repo_root))
+        })
+        .filter(|r| {
+            r.as_ref()
+                .map_or(true, |e| !crate::is_monja_special_file(e.path()))
+        })
         .map(move |entry| {
             // would be convenient to map path out earlier, but that requires a clone
             // because the path comes from a dropped Entry.
+            let entry = entry.map_err(|e| LocalWalkError(e.into()))?;
             let path = entry
                 .path()
                 .strip_prefix(local_root)

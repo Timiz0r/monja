@@ -14,8 +14,8 @@ pub enum CleanError {
     LocalStateInitialization(#[from] local::StateInitializationError),
     #[error("Unable to initialize repo state.")]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
-    #[error("Failed to delete file.")]
-    Io(#[source] std::io::Error),
+    #[error("Failed to remove file.")]
+    RemoveFile(#[source] std::io::Error),
     #[error("Unable to load an index file.")]
     FileIndex(#[from] FileIndexError),
 }
@@ -50,7 +50,7 @@ fn index_clean(
     if !opts.dry_run {
         for file in files_to_clean.iter() {
             let path = file.as_ref().to_path(&profile.local_root);
-            fs::remove_file(path).map_err(CleanError::Io)?;
+            fs::remove_file(path).map_err(CleanError::RemoveFile)?;
         }
     }
 
@@ -78,7 +78,7 @@ fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSu
         let path = file.as_ref().to_path(&profile.local_root);
 
         if !opts.dry_run {
-            fs::remove_file(path).map_err(CleanError::Io)?;
+            fs::remove_file(path).map_err(CleanError::RemoveFile)?;
         }
 
         files_cleaned.push(file.into());

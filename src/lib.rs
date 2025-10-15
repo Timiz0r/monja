@@ -52,20 +52,25 @@ pub enum MonjaProfileConfigError {
     Deserialization(#[from] toml::de::Error),
     #[error("Unable to serialize monja-profile.toml.")]
     Serialization(#[from] toml::ser::Error),
-    #[error("Unable to save/load monja-profile.toml.")]
-    Io(#[from] std::io::Error),
+    #[error("Unable to read from monja-profile.toml.")]
+    Read(#[source] std::io::Error),
+    #[error("Unable to write to monja-profile.toml.")]
+    Write(#[source] std::io::Error),
 }
 
 impl MonjaProfileConfig {
     // we take a path to config file, not folder, since the profile could be one located in the repo, pointed to by local
     pub fn load(config_path: &AbsolutePath) -> Result<MonjaProfileConfig, MonjaProfileConfigError> {
-        let config = std::fs::read(config_path)?;
+        let config = std::fs::read(config_path).map_err(MonjaProfileConfigError::Read)?;
 
         Ok(toml::from_slice(&config)?)
     }
 
     pub fn save(&self, config_path: &AbsolutePath) -> Result<(), MonjaProfileConfigError> {
-        Ok(std::fs::write(config_path, toml::to_string(&self)?)?)
+        std::fs::write(config_path, toml::to_string(&self)?)
+            .map_err(MonjaProfileConfigError::Write)?;
+
+        Ok(())
     }
 }
 
