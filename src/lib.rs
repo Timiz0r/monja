@@ -13,6 +13,7 @@ use std::{
 };
 
 use clap::Args;
+use relative_path::{PathExt, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -20,14 +21,16 @@ pub(crate) mod local;
 pub(crate) mod repo;
 pub mod operation {
     pub mod clean;
+    pub mod fix;
     pub mod pull;
     pub mod push;
     pub mod status;
 }
 
 pub use crate::{
-    operation::clean::*, operation::pull::*, operation::push::*, operation::status::*,
-    repo::SetConfig, repo::SetConfigError, repo::SetName, repo::SetShortcutError,
+    operation::clean::*, operation::fix::*, operation::pull::*, operation::push::*,
+    operation::status::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
+    repo::SetShortcutError,
 };
 
 //note that file index error is internal implementation detail
@@ -56,16 +59,13 @@ pub enum MonjaProfileConfigError {
 impl MonjaProfileConfig {
     // we take a path to config file, not folder, since the profile could be one located in the repo, pointed to by local
     pub fn load(config_path: &AbsolutePath) -> Result<MonjaProfileConfig, MonjaProfileConfigError> {
-        let config = std::fs::read(config_path.as_ref())?;
+        let config = std::fs::read(config_path)?;
 
         Ok(toml::from_slice(&config)?)
     }
 
     pub fn save(&self, config_path: &AbsolutePath) -> Result<(), MonjaProfileConfigError> {
-        Ok(std::fs::write(
-            config_path.as_ref(),
-            toml::to_string(&self)?,
-        )?)
+        Ok(std::fs::write(config_path, toml::to_string(&self)?)?)
     }
 }
 
@@ -124,24 +124,67 @@ impl AbsolutePath {
     }
 }
 
-impl AsRef<Path> for AbsolutePath {
-    fn as_ref(&self) -> &Path {
+impl Deref for AbsolutePath {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
         &self.path
     }
 }
 
+impl<T> AsRef<T> for AbsolutePath
+where
+    T: ?Sized,
+    <Self as Deref>::Target: AsRef<T>,
+{
+    fn as_ref(&self) -> &T {
+        self.deref().as_ref()
+    }
+}
+
 // the original types use private dependency RelativePathBuf, so we add these types to get around it
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalFilePath(PathBuf);
+
+#[derive(Error, Debug)]
+#[error("Unable to convert path to local file path.")]
+pub struct LocalFilePathConversionError;
+
 impl From<LocalFilePath> for PathBuf {
     fn from(value: LocalFilePath) -> Self {
         value.0
     }
 }
 
+impl LocalFilePath {
+    pub fn from(profile: &MonjaProfile, path: &Path) -> Result<Self, LocalFilePathConversionError> {
+        let path = RelativePathBuf::from_path(path).map_err(|_| LocalFilePathConversionError)?;
+        let path = path.to_logical_path(&profile.local_root);
+        if !path.starts_with(&profile.local_root) {
+            return Err(LocalFilePathConversionError);
+        }
+
+        // not necessarily the same as the original, since we evaluated .. and .
+        let path = path
+            .relative_to(&profile.local_root)
+            .map_err(|_| LocalFilePathConversionError)?;
+        Ok(local::FilePath::new(path).into())
+    }
+}
+
 impl From<local::FilePath> for LocalFilePath {
     fn from(value: local::FilePath) -> Self {
-        LocalFilePath(value.into_relative_path_buf().to_path(""))
+        LocalFilePath(value.to_path("".as_ref()))
+    }
+}
+
+impl TryFrom<&LocalFilePath> for local::FilePath {
+    type Error = relative_path::FromPathError;
+
+    fn try_from(value: &LocalFilePath) -> Result<Self, Self::Error> {
+        Ok(local::FilePath::new(
+            relative_path::RelativePathBuf::from_path(value)?,
+        ))
     }
 }
 

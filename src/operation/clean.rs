@@ -94,6 +94,7 @@ fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSu
     Ok(CleanSuccess { files_cleaned })
 }
 
+// TODO: changed mind. just use these
 fn convert_index_error(e: local::FileIndexError) -> CleanError {
     use local::IndexKind::*;
     match e {

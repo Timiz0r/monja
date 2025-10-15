@@ -196,7 +196,7 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
 
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
-        repo_dir: repo_root.as_ref().to_path_buf(),
+        repo_dir: repo_root.to_path_buf(),
         ..old
     });
 
@@ -229,7 +229,7 @@ fn missing_repo_folder_post_profile() -> Result<()> {
 
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
-        repo_dir: repo_root.as_ref().to_path_buf(),
+        repo_dir: repo_root.to_path_buf(),
         ..old
     });
 
@@ -288,7 +288,7 @@ fn index_based_directory_traversal_absolute() -> Result<()> {
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     // a bit of a leaky implementation detail, but oh well
-    let index_path = sim.profile()?.data_root.as_ref().join("monja-index.toml");
+    let index_path = sim.profile()?.data_root.join("monja-index.toml");
     assert_that!(index_path.exists(), is_true());
 
     let replacement_index = r#""/etc/passwd" = "simple""#;
@@ -320,10 +320,10 @@ fn index_based_directory_traversal_relative() -> Result<()> {
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     // a bit of a leaky implementation detail, but oh well
-    let index_path = sim.profile()?.data_root.as_ref().join("monja-index.toml");
+    let index_path = sim.profile()?.data_root.join("monja-index.toml");
     assert_that!(index_path.exists(), is_true());
 
-    let foo_path = sim.profile()?.local_root.as_ref().join("../foo");
+    let foo_path = sim.profile()?.local_root.join("../foo");
     fs::write(foo_path, "foo")?;
 
     let replacement_index = r#""../foo" = "simple""#;

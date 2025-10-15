@@ -22,25 +22,35 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Init(InitCommand),
     Push(PushCommand),
     Pull(PullCommand),
     Clean(CleanCommand),
-    Init(InitCommand),
+    Fix(FixCommand),
     LocalStatus(StatusCommand),
     ChangeProfile(ChangeProfileCommand),
 }
 
 // TODO: macro?
 impl Commands {
-    fn execute(&self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+    fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         match self {
+            Commands::Init(command) => command.execute(profile, opts),
             Commands::Push(command) => command.execute(profile, opts),
             Commands::Pull(command) => command.execute(profile, opts),
             Commands::Clean(command) => command.execute(profile, opts),
-            Commands::Init(command) => command.execute(profile, opts),
+            Commands::Fix(command) => command.execute(profile, opts),
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::ChangeProfile(command) => command.execute(profile, opts),
         }
+    }
+}
+
+#[derive(Args)]
+struct InitCommand {}
+impl InitCommand {
+    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
+        todo!()
     }
 }
 
@@ -57,12 +67,7 @@ impl PushCommand {
         }) = result
         {
             if !files_with_missing_sets.is_empty() {
-                // TODO: better recovery mechanisms
-                // easiest would be to select the last set, after which the user can head to the repo to figure it out.
-                eprint!("There are local files whose corresponding sets are missing. ");
-                eprintln!(
-                    "To fix this, manually merge local changes into the repo, then pull the repo."
-                );
+                print_common_error("There are local files whose corresponding sets are missing.");
 
                 eprintln!("Sets missing, as well as the files that currently require them:");
                 for (set_name, file_paths) in files_with_missing_sets {
@@ -73,12 +78,7 @@ impl PushCommand {
                 }
             }
             if !missing_files.is_empty() {
-                // TODO: better recovery mechanisms
-                // easiest would be to recreate the file in the set or pick the last set
-                eprint!("There are local files missing from expected sets.");
-                eprintln!(
-                    "To fix this, manually merge local changes into the repo, then pull the repo."
-                );
+                print_common_error("There are local files missing from expected sets.");
 
                 eprintln!("Files missing, as grouped under the sets they were expected to be in:");
                 for (set_name, file_paths) in missing_files {
@@ -109,7 +109,37 @@ impl PushCommand {
             println!("No files pushed.");
         }
 
-        Ok(())
+        return Ok(());
+
+        fn print_common_error(description: &str) {
+            eprint!("{}", description);
+            eprint!(
+                "This happens due to changes being made in the repo without having yet pulled."
+            );
+            eprint!(
+                "It is recommended to `monja push` before doing a `git pull` or other repo modification."
+            );
+            eprintln!("To fix this, consider doing any of the the following:");
+
+            eprintln!(
+                "\t* If there are no local changes that would get overwritten, use `monja pull`."
+            );
+
+            eprint!(
+                "\t* If the files should use a different set (such as the last specified in monja-profile.toml), "
+            );
+            eprint!(
+                "use some variation of `monja fix` to specify that set and copy files to that set. "
+            );
+            eprintln!("Then, use `monja push` to push the rest of the files to the right set.");
+
+            eprint!("\t* If the file is no longer needed, simply delete it. ");
+            eprintln!(
+                "Then, use `monja push` to push these and the rest of the files to the right set."
+            );
+
+            eprintln!("\t* Manually merge local changes into the repo, then `monja pull`.");
+        }
     }
 }
 
@@ -177,10 +207,34 @@ impl CleanCommand {
 }
 
 #[derive(Args)]
-struct InitCommand {}
-impl InitCommand {
-    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
-        todo!()
+struct FixCommand {
+    #[arg(long)]
+    owning_set: String,
+
+    // TODO: also allow stdin
+    files: Vec<PathBuf>,
+}
+
+impl FixCommand {
+    fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+        let files: Result<Vec<LocalFilePath>, monja::LocalFilePathConversionError> = self
+            .files
+            .iter()
+            .map(|f| LocalFilePath::from(&profile, f))
+            .collect();
+        let files: Vec<LocalFilePath> = files?;
+
+        let result = monja::fix(&profile, &opts, &files, SetName(self.owning_set))?;
+
+        println!(
+            "Successfully changed the following files to use set `{}` (including copying them to the set):",
+            result.owning_set
+        );
+        for file in result.files.into_iter() {
+            println!("\t{:?}", &file);
+        }
+
+        Ok(())
     }
 }
 

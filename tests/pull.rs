@@ -341,7 +341,7 @@ fn dry_run() -> Result<()> {
 
     // slightly leaky. it's an external behavior that we hide from the user, hence this method of testing
     expect_that!(
-        fs::exists(sim.profile()?.data_root.as_ref().join("monja-index.toml")),
+        fs::exists(sim.profile()?.data_root.join("monja-index.toml")),
         ok(is_false())
     );
 

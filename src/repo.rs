@@ -20,8 +20,21 @@ pub(crate) struct Set {
 }
 
 impl Set {
-    pub(crate) fn tracks_file(&self, local_file: &local::FilePath) -> bool {
-        self.locally_mapped_files.contains_key(local_file)
+    pub(crate) fn tracks_file(&self, local_path: &local::FilePath) -> bool {
+        self.locally_mapped_files.contains_key(local_path)
+    }
+
+    // returns PathBuf because AbsolutePath requires the file exist
+    pub(crate) fn get_repo_absolute_path_for(&self, local_path: &local::FilePath) -> PathBuf {
+        self.get_repo_relative_path_for(local_path)
+            .to_path(&self.root)
+    }
+
+    pub(crate) fn get_repo_relative_path_for(
+        &self,
+        local_path: &local::FilePath,
+    ) -> RelativePathBuf {
+        self.shortcut.relative(local_path)
     }
 }
 
@@ -62,18 +75,14 @@ impl SetConfig {
         profile: &crate::MonjaProfile,
         set_name: &SetName,
     ) -> Result<SetConfig, SetConfigError> {
-        let config_path = profile
-            .repo_root
-            .as_ref()
-            .join(set_name)
-            .join(".monja-set.toml");
+        let config_path = profile.repo_root.join(set_name).join(".monja-set.toml");
         let config = fs::read(config_path).unwrap_or_default();
 
         toml::from_slice(&config).map_err(|e| SetConfigError::Deserialization(set_name.clone(), e))
     }
 
     pub fn save(&self, profile: &MonjaProfile, set_name: &SetName) -> Result<(), SetConfigError> {
-        let set_dir = profile.repo_root.as_ref().join(set_name);
+        let set_dir = profile.repo_root.join(set_name);
         fs::create_dir_all(&set_dir).map_err(|e| SetConfigError::Save(set_name.clone(), e))?;
 
         let config_path = set_dir.join(".monja-set.toml");
@@ -126,6 +135,7 @@ impl SetShortcut {
     }
 }
 
+// TODO: do a pass on all asrefs and consider deref as well
 impl<T> AsRef<T> for SetShortcut
 where
     T: ?Sized,
@@ -182,8 +192,8 @@ pub(crate) fn initialize_full_state(
     profile: &MonjaProfile,
 ) -> Result<RepoState, Vec<StateInitializationError>> {
     // while we'll prefer to collect errors into a vector, there's no point in continuing if we can't read this dir.
-    let read_dir = fs::read_dir(profile.repo_root.as_ref())
-        .map_err(|e| vec![StateInitializationError::Io(e)])?;
+    let read_dir =
+        fs::read_dir(&profile.repo_root).map_err(|e| vec![StateInitializationError::Io(e)])?;
 
     let mut set_info = Vec::new();
     let mut errors = Vec::new();
@@ -227,7 +237,7 @@ fn load_set_state(
     let shortcut = set_config.shortcut.unwrap_or("".into());
     let shortcut = SetShortcut::from_path(shortcut)?;
 
-    let root = AbsolutePath::for_existing_path(&profile.repo_root.as_ref().join(set_name))
+    let root = AbsolutePath::for_existing_path(&profile.repo_root.join(set_name))
         .expect("This function gets called after reading dirs in repo root.");
 
     let mut locally_mapped_files = HashMap::new();

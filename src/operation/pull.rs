@@ -98,14 +98,14 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
 
             rsync(
                 set.root.as_ref(),
-                &set.shortcut.to_path(profile.local_root.as_ref()),
+                &set.shortcut.to_path(&profile.local_root),
                 file_paths.iter().map(|p| p.path_in_set.to_path("")),
                 opts,
             )
             .map_err(PullError::Rsync)?;
         }
 
-        index.save(profile).map_err(|_| PullError::FileIndex)?;
+        index.update(profile).map_err(|_| PullError::FileIndex)?;
     }
 
     let files_to_pull = convert_set_file_result(&profile.config.target_sets, files_to_pull);

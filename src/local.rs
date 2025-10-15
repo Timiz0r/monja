@@ -103,7 +103,7 @@ impl FileIndex {
         }
     }
 
-    pub(crate) fn save(&self, profile: &MonjaProfile) -> Result<(), FileIndexError> {
+    pub(crate) fn update(&self, profile: &MonjaProfile) -> Result<(), FileIndexError> {
         let curr_path = FileIndex::path(profile, &IndexKind::Current);
 
         if curr_path.exists() {
@@ -115,6 +115,20 @@ impl FileIndex {
             &curr_path,
             toml::to_string(self)
                 .map_err(|e| FileIndexError::Serialization(IndexKind::Current, e))?,
+        )
+        .map_err(|e| FileIndexError::Io(IndexKind::Current, e))
+    }
+
+    pub(crate) fn save(
+        &self,
+        profile: &MonjaProfile,
+        kind: &IndexKind,
+    ) -> Result<(), FileIndexError> {
+        let path = FileIndex::path(profile, kind);
+
+        std::fs::write(
+            &path,
+            toml::to_string(self).map_err(|e| FileIndexError::Serialization(kind.clone(), e))?,
         )
         .map_err(|e| FileIndexError::Io(IndexKind::Current, e))
     }
@@ -133,7 +147,7 @@ impl FileIndex {
 
     // not an AbsolutePath because the index may not exist
     fn path(profile: &MonjaProfile, kind: &IndexKind) -> PathBuf {
-        profile.data_root.as_ref().join(kind.file_name())
+        profile.data_root.join(kind.file_name())
     }
 }
 
@@ -180,8 +194,8 @@ impl FilePath {
         FilePath(object_path)
     }
 
-    pub(crate) fn into_relative_path_buf(self) -> RelativePathBuf {
-        self.0
+    pub(crate) fn to_path(&self, base: &Path) -> PathBuf {
+        self.0.to_path(base)
     }
 }
 
@@ -225,8 +239,8 @@ pub enum FileIndexError {
 }
 
 fn walk(profile: &MonjaProfile) -> impl Iterator<Item = io::Result<FilePath>> {
-    let local_root = profile.local_root.as_ref();
-    let repo_root = profile.repo_root.as_ref();
+    let local_root = &profile.local_root;
+    let repo_root = &profile.repo_root;
     let walker = WalkBuilder::new(local_root)
         .standard_filters(false)
         .add_custom_ignore_filename(".monjaignore")

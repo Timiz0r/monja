@@ -49,10 +49,12 @@ pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSucce
 
     if !opts.dry_run {
         for set_name in profile.config.target_sets.iter() {
-            let set = repo
-                .sets
-                .get(set_name)
-                .expect("Already checked for missing sets.");
+            let Some(set) = repo.sets.get(set_name) else {
+                // we don't allow missing sets if there's a local file that was placed by that set.
+                // this is covered above by files_with_missing_sets.
+                // however, if the profile specifies a non-existing set, we opt to continue if possible.
+                continue;
+            };
             let files = local_state
                 .files_to_push
                 .get(set_name)
@@ -63,11 +65,11 @@ pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSucce
             // here, the source is /home/xx/foo/bar/, dest is /monja/set/, and file is baz
             // incidentally, local::FilePath is foo/bar/baz
             rsync(
-                set.shortcut.to_path(profile.local_root.as_ref()).as_path(),
+                set.shortcut.to_path(&profile.local_root).as_path(),
                 set.root.as_ref(),
                 files
                     .iter()
-                    .map(|local_path| set.shortcut.relative(local_path.as_ref()).to_path("")),
+                    .map(|local_path| set.get_repo_relative_path_for(local_path).to_path("")),
                 opts,
             )
             .map_err(PushError::Rsync)?;

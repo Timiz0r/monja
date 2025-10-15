@@ -8,8 +8,8 @@ use googletest::prelude::*;
 use tempfile::TempDir;
 
 use monja::{
-    AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
-    SetConfig, SetName,
+    AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, MonjaProfileConfig,
+    MonjaProfileConfigError, SetConfig, SetName,
 };
 use walkdir::WalkDir;
 
@@ -116,6 +116,10 @@ impl Simulator {
         fs::remove_dir_all(path).unwrap();
 
         self
+    }
+
+    pub(crate) fn local_file_path(&self, path: &Path) -> LocalFilePath {
+        LocalFilePath::from(&self.profile().unwrap(), path).unwrap()
     }
 }
 
@@ -303,7 +307,7 @@ macro_rules! fs_operation {
     // so putting it at the top to stand out more
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().unwrap().repo_root.as_ref().join($set);
+            let path = $sim.profile().unwrap().repo_root.join($set);
             let mut handler = $crate::sim::Manipulation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
@@ -319,7 +323,7 @@ macro_rules! fs_operation {
 
     (SetValidation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().unwrap().repo_root.as_ref().join($set);
+            let path = $sim.profile().unwrap().repo_root.join($set);
             let mut handler = $crate::sim::SetValidation::new(&$sim, &path);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
