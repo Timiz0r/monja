@@ -14,7 +14,7 @@ mod sim;
 
 #[gtest]
 fn simple_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -34,7 +34,7 @@ fn simple_set() -> Result<()> {
     };
 
     let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
-    expect_that!(pull_result.cleanable_files, len(eq(0)));
+    expect_that!(pull_result.cleanable_files, is_empty());
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -54,7 +54,7 @@ fn simple_set() -> Result<()> {
 
 #[gtest]
 fn empty_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -64,14 +64,14 @@ fn empty_set() -> Result<()> {
     };
 
     let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
-    expect_that!(pull_result.files_pulled, len(eq(0)));
+    expect_that!(pull_result.files_pulled, is_empty());
 
     Ok(())
 }
 
 #[gtest]
 fn multiple_sets() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -129,7 +129,7 @@ fn multiple_sets() -> Result<()> {
 
 #[gtest]
 fn shortcuts() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2", "set3"]),
         ..old
@@ -182,7 +182,7 @@ fn shortcuts() -> Result<()> {
 
 #[gtest]
 fn shorcut_directory_traversal() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1"]),
         ..old
@@ -208,7 +208,7 @@ fn shorcut_directory_traversal() -> Result<()> {
 
 #[gtest]
 fn shorcut_absolute_path() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1"]),
         ..old
@@ -234,7 +234,7 @@ fn shorcut_absolute_path() -> Result<()> {
 
 #[gtest]
 fn missing_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -269,7 +269,7 @@ fn missing_set() -> Result<()> {
 
 #[gtest]
 fn missing_repo_folder() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -300,7 +300,7 @@ fn missing_repo_folder() -> Result<()> {
 
 #[gtest]
 fn set_with_empty_name() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["", "set1"]),
         ..old
@@ -321,7 +321,7 @@ fn set_with_empty_name() -> Result<()> {
 
 #[gtest]
 fn dry_run() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -351,7 +351,7 @@ fn dry_run() -> Result<()> {
 
 #[gtest]
 fn cleanable_files() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old

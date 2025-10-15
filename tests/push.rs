@@ -18,7 +18,7 @@ mod sim;
 
 #[gtest]
 fn simple_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -68,7 +68,7 @@ fn simple_set() -> Result<()> {
 
 #[gtest]
 fn multi_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -127,7 +127,7 @@ fn multi_set() -> Result<()> {
 
 #[gtest]
 fn missing_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -146,7 +146,7 @@ fn missing_set() -> Result<()> {
         push_result,
         err(pat!(PushError::Consistency {
             files_with_missing_sets: len(eq(1)),
-            missing_files: len(eq(0))
+            missing_files: is_empty()
         }))
     );
 
@@ -155,7 +155,7 @@ fn missing_set() -> Result<()> {
 
 #[gtest]
 fn missing_files() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -176,7 +176,7 @@ fn missing_files() -> Result<()> {
     expect_that!(
         push_result,
         err(pat!(PushError::Consistency {
-            files_with_missing_sets: len(eq(0)),
+            files_with_missing_sets: is_empty(),
             missing_files: len(eq(1))
         }))
     );
@@ -186,7 +186,7 @@ fn missing_files() -> Result<()> {
 
 #[gtest]
 fn missing_repo_folder_pre_profile() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
 
     // since the simulator is responsible for cleaning up its temp folder, we'll make our own to delete
     let temp_repo_root = tempfile::Builder::new()
@@ -219,7 +219,7 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
 
 #[gtest]
 fn missing_repo_folder_post_profile() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
 
     // since the simulator is responsible for cleaning up its temp folder, we'll make our own to delete
     let temp_repo_root = tempfile::Builder::new()
@@ -254,7 +254,7 @@ fn missing_repo_folder_post_profile() -> Result<()> {
 
 #[gtest]
 fn no_index() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -268,14 +268,14 @@ fn no_index() -> Result<()> {
     // no pull, no index
 
     let push_result = monja::push(&sim.profile()?, sim.execution_options())?;
-    expect_that!(push_result.files_pushed, len(eq(0)));
+    expect_that!(push_result.files_pushed, is_empty());
 
     Ok(())
 }
 
 #[gtest]
 fn index_based_directory_traversal_absolute() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -307,7 +307,7 @@ fn index_based_directory_traversal_absolute() -> Result<()> {
 
 #[gtest]
 fn index_based_directory_traversal_relative() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -333,14 +333,14 @@ fn index_based_directory_traversal_relative() -> Result<()> {
 
     // since this file lives outside of the local root, it shouldn't get picked up whether or not it's mentioned in the index
     // this is because we do a full scan of the directory to find inconsistencies and flag them for the user/recover.
-    expect_that!(push_result.files_pushed, len(eq(0)));
+    expect_that!(push_result.files_pushed, is_empty());
 
     Ok(())
 }
 
 #[gtest]
 fn dry_run() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old

@@ -88,7 +88,11 @@ impl Simulator {
         &self.opts
     }
 
-    pub(crate) fn configure_profile<P>(&mut self, mut config: P) -> &mut Self
+    pub(crate) fn local_file_path(&self, path: &Path) -> LocalFilePath {
+        LocalFilePath::from(&self.profile().unwrap(), path).unwrap()
+    }
+
+    pub(crate) fn configure_profile<P>(&self, mut config: P) -> &Self
     where
         P: FnMut(MonjaProfileConfig) -> MonjaProfileConfig,
     {
@@ -112,15 +116,17 @@ impl Simulator {
     }
 
     // adding is handled by set_operation!
-    pub(crate) fn rem_set(&mut self, set_name: SetName) -> &mut Self {
+    pub(crate) fn rem_set(&self, set_name: SetName) -> &Self {
         let path = self.repo_dir.path().join(set_name);
         fs::remove_dir_all(path).unwrap();
 
         self
     }
 
-    pub(crate) fn local_file_path(&self, path: &Path) -> LocalFilePath {
-        LocalFilePath::from(&self.profile().unwrap(), path).unwrap()
+    pub(crate) fn set_ignorefile(&self, ignore_spec: &str) -> &Self {
+        fs::write(self.local_dir.path().join(".monjaignore"), ignore_spec).unwrap();
+
+        self
     }
 }
 
@@ -272,10 +278,15 @@ impl OperationHandler for GeneralValidation {
     }
 
     fn file(&mut self, path: &Path, expected_contents: &str) {
-        let contents = fs::read_to_string(path).unwrap();
-        expect_that!(contents, eq(expected_contents));
-
-        expect_that!(self.files.insert(path.to_path_buf()), is_true());
+        match fs::read_to_string(path) {
+            Ok(contents) => {
+                expect_that!(contents, eq(expected_contents));
+                expect_that!(self.files.insert(path.to_path_buf()), is_true());
+            }
+            Err(err) => {
+                add_failure!("Error reading file: {}", err);
+            }
+        };
     }
 
     fn remove_file(&mut self, _path: &Path) {
@@ -403,10 +414,10 @@ macro_rules! fs_operation {
         fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path $contents); ($($tail)*));
     };
     (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (remfile $path:literal $($tail:tt)*)) => {
-        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* remfile $path); ($($tail)*));
     };
     (@extract_inner $symbols:tt; $depth:tt; ($($buffer:tt)*); (remdir $path:literal $($tail:tt)*)) => {
-        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* file $path); ($($tail)*));
+        fs_operation!(@extract_inner $symbols; $depth; ($($buffer)* remdir $path); ($($tail)*));
     };
 
     // and now the same sort of ones for skipping

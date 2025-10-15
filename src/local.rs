@@ -1,16 +1,17 @@
 use std::{
     collections::HashMap,
-    fmt::Display,
-    fs,
     path::{Path, PathBuf},
 };
 
-use crate::{MonjaProfile, SetName, repo};
+use crate::{MonjaProfile, repo};
 
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+mod index;
+pub(crate) use index::*;
 
 pub(crate) struct LocalState {
     pub files_to_push: HashMap<repo::SetName, Vec<FilePath>>,
@@ -33,7 +34,7 @@ pub(crate) fn retrieve_state(
     let mut missing_files = HashMap::with_capacity(repo.sets.len());
 
     let prev_index = FileIndex::load(profile, IndexKind::Previous)?;
-    let old_files_since_last_pull = prev_index.into_files_not_in(&curr_index);
+    let old_files_since_last_pull = prev_index.into_files_not_in(profile, &curr_index)?;
 
     for local_path in walk(profile) {
         let local_path = local_path?;
@@ -71,111 +72,6 @@ pub(crate) fn retrieve_state(
         untracked_files,
         old_files_since_last_pull,
     })
-}
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct FileIndex {
-    #[serde(flatten)]
-    set_mapping: HashMap<FilePath, repo::SetName>,
-}
-
-impl FileIndex {
-    pub(crate) fn load(
-        profile: &MonjaProfile,
-        kind: IndexKind,
-    ) -> Result<FileIndex, FileIndexError> {
-        let index_path = FileIndex::path(profile, &kind);
-
-        if !index_path.exists() {
-            return Ok(FileIndex {
-                set_mapping: HashMap::new(),
-            });
-        }
-
-        let index = fs::read(index_path).map_err(|e| FileIndexError::Read(kind.clone(), e))?;
-
-        toml::from_slice(&index).map_err(|e| FileIndexError::Deserialization(kind, e))
-    }
-
-    pub(crate) fn new() -> FileIndex {
-        FileIndex {
-            set_mapping: HashMap::new(),
-        }
-    }
-
-    pub(crate) fn save(
-        &self,
-        profile: &MonjaProfile,
-        kind: IndexKind,
-    ) -> Result<(), FileIndexError> {
-        let path = FileIndex::path(profile, &kind);
-
-        fs::write(
-            &path,
-            toml::to_string(self).map_err(|e| FileIndexError::Serialization(kind.clone(), e))?,
-        )
-        .map_err(|e| FileIndexError::Write(IndexKind::Current, e))
-    }
-
-    pub(crate) fn tracks(&self, local_file: &FilePath) -> bool {
-        self.set_mapping.contains_key(local_file)
-    }
-
-    pub(crate) fn take(&mut self, local_file: &FilePath) -> Option<repo::SetName> {
-        self.set_mapping.remove(local_file)
-    }
-
-    pub(crate) fn set(&mut self, local_file: FilePath, owning_set: SetName) {
-        self.set_mapping.insert(local_file, owning_set);
-    }
-
-    pub(crate) fn into_files_not_in(self, other: &FileIndex) -> Vec<FilePath> {
-        let mut old_files_since_last_pull: Vec<FilePath> = self
-            .set_mapping
-            .into_keys()
-            .filter(|f| !other.tracks(f))
-            .collect();
-        old_files_since_last_pull.sort_by(|l, r| l.as_ref().cmp(r.as_ref()));
-        old_files_since_last_pull
-    }
-
-    // not an AbsolutePath because the index may not exist
-    fn path(profile: &MonjaProfile, kind: &IndexKind) -> PathBuf {
-        profile.data_root.join(kind.file_name())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum IndexKind {
-    Current,
-    Previous,
-}
-
-impl IndexKind {
-    pub(crate) fn file_name(&self) -> &Path {
-        match self {
-            IndexKind::Current => "monja-index.toml".as_ref(),
-            IndexKind::Previous => "monja-index-prev.toml".as_ref(),
-        }
-    }
-}
-
-impl Display for IndexKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.file_name().display())
-    }
-}
-
-// while we could get rid of this in favor of using LocalState,
-// it's a lot cheaper to do it this way, since we only need indices instead of both local and repo state.
-pub(crate) fn old_files_since_last_pull(
-    profile: &MonjaProfile,
-) -> Result<Vec<FilePath>, FileIndexError> {
-    let curr_index = FileIndex::load(profile, IndexKind::Current)?;
-    let prev_index = FileIndex::load(profile, IndexKind::Previous)?;
-
-    let old_files = prev_index.into_files_not_in(&curr_index);
-    Ok(old_files)
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Serialize, Deserialize, Debug)]
@@ -225,27 +121,9 @@ pub enum StateInitializationError {
     LocalWalk(#[from] LocalWalkError),
 }
 
-#[derive(Error, Debug)]
-pub enum FileIndexError {
-    #[error("Unable to read the file index.")]
-    Read(IndexKind, #[source] std::io::Error),
-    #[error("Unable to write the file index.")]
-    Write(IndexKind, #[source] std::io::Error),
-    #[error("Unable to copy the current file index to the previous file index.")]
-    CopyToPrevious(#[source] std::io::Error),
-    #[error("Unable to deserialize monja-index.toml.")]
-    Deserialization(IndexKind, #[source] toml::de::Error),
-    #[error("Unable to serialize monja-index.toml.")]
-    Serialization(IndexKind, #[source] toml::ser::Error),
-}
-
-#[derive(Error, Debug)]
-#[error("Error when walking local files.")]
-// this will also be a rare case of using anyhow in this crate (we use it plenty in main).
-// we want to hide the ignore crate's details.
-pub struct LocalWalkError(#[from] anyhow::Error);
-
-fn walk(profile: &MonjaProfile) -> impl Iterator<Item = Result<FilePath, LocalWalkError>> {
+pub(super) fn walk(
+    profile: &MonjaProfile,
+) -> impl Iterator<Item = Result<FilePath, LocalWalkError>> {
     let local_root = &profile.local_root;
     let repo_root = &profile.repo_root;
     let walker = WalkBuilder::new(local_root)

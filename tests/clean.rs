@@ -11,7 +11,7 @@ mod sim;
 
 #[gtest]
 fn index_clean() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -65,8 +65,47 @@ fn index_clean() -> Result<()> {
 }
 
 #[gtest]
+fn index_clean_ignorefile() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "foo"
+            file "bar" "baz"
+        end
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "foo"
+            remfile "bar"
+        end
+    };
+
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    expect_that!(pull_result.cleanable_files, { Path::new("foo/bar") });
+
+    sim.set_ignorefile("foo/bar");
+
+    let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Index)?;
+    expect_that!(clean_result.files_cleaned, is_empty());
+
+    fs_operation! { LocalValidation, sim,
+        dir "foo"
+            file "bar" "baz"
+        end
+    };
+
+    Ok(())
+}
+
+#[gtest]
 fn full_clean() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -114,6 +153,50 @@ fn full_clean() -> Result<()> {
 
     fs_operation! { LocalValidation, sim,
         file "set2b" "set2b-pull2"
+    };
+
+    Ok(())
+}
+
+#[gtest]
+fn full_clean_ignorefile() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "foo"
+            file "bar" "baz"
+        end
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "foo"
+            remfile "bar"
+        end
+    };
+
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    expect_that!(pull_result.cleanable_files, { Path::new("foo/bar") });
+
+    fs_operation! { LocalManipulation, sim,
+        file "notinset" "notinset"
+    };
+
+    sim.set_ignorefile("foo/bar\nnotinset");
+
+    let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Index)?;
+    expect_that!(clean_result.files_cleaned, is_empty());
+
+    fs_operation! { LocalValidation, sim,
+        file "notinset" "notinset"
+        dir "foo"
+            file "bar" "baz"
+        end
     };
 
     Ok(())

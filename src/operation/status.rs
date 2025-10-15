@@ -6,6 +6,7 @@ use crate::{LocalFilePath, MonjaProfile, convert_set_file_result, local, repo};
 pub enum StatusError {
     #[error("Unable to initialize repo state.")]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
+
     #[error("Unable to initialize local state.")]
     LocalStateInitialization(#[from] local::StateInitializationError),
 }
@@ -16,7 +17,7 @@ pub struct Status {
     pub files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
     pub missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
     pub untracked_files: Vec<LocalFilePath>,
-    pub old_files_since_last_pull: Vec<LocalFilePath>,
+    pub old_files_after_last_pull: Vec<LocalFilePath>,
 }
 
 pub fn local_status(profile: &MonjaProfile) -> Result<Status, StatusError> {
@@ -35,7 +36,7 @@ pub fn local_status(profile: &MonjaProfile) -> Result<Status, StatusError> {
     let missing_files =
         convert_set_file_result(&profile.config.target_sets, local_state.missing_files);
 
-    let old_files_since_last_pull = local_state
+    let old_files_after_last_pull = local_state
         .old_files_since_last_pull
         .into_iter()
         .map(|f| f.into())
@@ -51,7 +52,7 @@ pub fn local_status(profile: &MonjaProfile) -> Result<Status, StatusError> {
         files_to_push,
         files_with_missing_sets,
         missing_files,
-        old_files_since_last_pull,
+        old_files_after_last_pull,
         untracked_files,
     })
 }

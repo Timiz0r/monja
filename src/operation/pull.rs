@@ -11,12 +11,18 @@ use crate::{
 pub enum PullError {
     #[error("Unable to initialize repo state.")]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
+
     #[error("Sets needed by the profile are missing from the repo.")]
     MissingSets(Vec<repo::SetName>),
+
     #[error("Failed to copy files via rsync.")]
     Rsync(#[source] std::io::Error),
+
     #[error("Unable to save file index.")]
     FileIndex(#[from] local::FileIndexError),
+
+    #[error("Error when walking local files to find out which are ignored.")]
+    LocalWalk(#[from] local::LocalWalkError),
 }
 
 #[derive(Debug)]
@@ -116,7 +122,7 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
 
     let files_pulled = convert_set_file_result(&profile.config.target_sets, files_to_pull);
     let cleanable_files = prev_index
-        .into_files_not_in(&updated_index)
+        .into_files_not_in(profile, &updated_index)?
         .into_iter()
         .map(|f| f.into())
         .collect();

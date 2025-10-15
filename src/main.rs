@@ -305,7 +305,7 @@ impl StatusCommand {
 
         if self.filter.as_ref().is_none_or(|f| f.untracked) {
             println!("Files removed from repo since last pull (also found in untracked):");
-            for path in status.old_files_since_last_pull.into_iter() {
+            for path in status.old_files_after_last_pull.into_iter() {
                 println!("{:?}", path);
             }
         }

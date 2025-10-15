@@ -14,7 +14,7 @@ mod sim;
 
 #[gtest]
 fn status() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -75,7 +75,7 @@ fn status() -> Result<()> {
         }
     );
     expect_that!(
-        status.old_files_since_last_pull,
+        status.old_files_after_last_pull,
         {
             eq(Path::new("set1")),
             eq(Path::new("set2b"))

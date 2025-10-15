@@ -9,7 +9,7 @@ mod sim;
 
 #[gtest]
 fn fix_missing_set() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
@@ -43,7 +43,7 @@ fn fix_missing_set() -> Result<()> {
 
 #[gtest]
 fn fix_missing_files() -> Result<()> {
-    let mut sim = Simulator::create();
+    let sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["set1", "set2"]),
         ..old
