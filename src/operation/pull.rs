@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::{
-    AbsolutePath, ExecutionOptions, MonjaProfile, RepoFilePath, SetName, convert_set_file_result,
-    local, repo, rsync,
+    AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, RepoFilePath, SetName,
+    convert_set_file_result, local, repo, rsync,
 };
 
 #[derive(Error, Debug)]
@@ -22,6 +22,8 @@ pub enum PullError {
 #[derive(Debug)]
 pub struct PullSuccess {
     pub files_pulled: Vec<(SetName, Vec<RepoFilePath>)>,
+
+    pub cleanable_files: Vec<LocalFilePath>,
 }
 
 pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSuccess, PullError> {
@@ -69,7 +71,7 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
     }
 
     let mut files_to_pull = HashMap::with_capacity(set_info.len());
-    let mut index = local::FileIndex::new();
+    let mut updated_index = local::FileIndex::new();
     for (local_path, repo_file) in files.into_iter() {
         files_to_pull
             .entry(repo_file.owning_set.clone())
@@ -77,7 +79,7 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
             .push(repo_file.path);
 
         // TODO: what if rsync failed and we don't update index even though some copies happened?
-        index.set(local_path, repo_file.owning_set);
+        updated_index.set(local_path, repo_file.owning_set);
     }
 
     if !opts.dry_run {
@@ -103,13 +105,24 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
             )
             .map_err(PullError::Rsync)?;
         }
-
-        index.update(profile)?;
     }
 
-    let files_to_pull = convert_set_file_result(&profile.config.target_sets, files_to_pull);
+    let prev_index = local::FileIndex::load(profile, local::IndexKind::Current)?;
+    if !opts.dry_run {
+        updated_index.save(profile, local::IndexKind::Current)?;
+        // could also hypothetically copy the file. in fact, it's technically better, but it doesn't really matter.
+        prev_index.save(profile, local::IndexKind::Previous)?;
+    }
+
+    let files_pulled = convert_set_file_result(&profile.config.target_sets, files_to_pull);
+    let cleanable_files = prev_index
+        .into_files_not_in(&updated_index)
+        .into_iter()
+        .map(|f| f.into())
+        .collect();
     return Ok(PullSuccess {
-        files_pulled: files_to_pull,
+        files_pulled,
+        cleanable_files,
     });
 
     // the code ends up being the cleanest when files takes ownership of its data from repo,

@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use googletest::prelude::*;
 
@@ -33,7 +33,8 @@ fn simple_set() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    expect_that!(pull_result.cleanable_files, len(eq(0)));
 
     fs_operation! { LocalValidation, sim,
         dir "foo"
@@ -344,6 +345,50 @@ fn dry_run() -> Result<()> {
         fs::exists(sim.profile()?.data_root.join("monja-index.toml")),
         ok(is_false())
     );
+
+    Ok(())
+}
+
+#[gtest]
+fn cleanable_files() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+        file "blueberry" "tart"
+        file "lemon" "pie"
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { SetManipulation, sim, "simple",
+        remfile "blueberry"
+    };
+
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    expect_that!(pull_result.cleanable_files, { Path::new("blueberry") });
+
+    fs_operation! { LocalValidation, sim,
+        file "blueberry" "tart"
+        file "lemon" "pie"
+    };
+
+    fs_operation! { SetManipulation, sim, "simple",
+        remfile "lemon"
+    };
+
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    expect_that!(pull_result.cleanable_files, { Path::new("lemon") });
+
+    fs_operation! { LocalValidation, sim,
+        file "blueberry" "tart"
+        file "lemon" "pie"
+    };
 
     Ok(())
 }

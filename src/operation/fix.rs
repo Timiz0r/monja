@@ -87,7 +87,7 @@ pub fn fix(
     }
 
     if !opts.dry_run {
-        index.save(profile, &local::IndexKind::Current)?;
+        index.save(profile, local::IndexKind::Current)?;
     }
 
     Ok(FixSuccess {

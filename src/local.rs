@@ -33,7 +33,7 @@ pub(crate) fn retrieve_state(
     let mut missing_files = HashMap::with_capacity(repo.sets.len());
 
     let prev_index = FileIndex::load(profile, IndexKind::Previous)?;
-    let old_files_since_last_pull = index_diff(&curr_index, prev_index);
+    let old_files_since_last_pull = prev_index.into_files_not_in(&curr_index);
 
     for local_path in walk(profile) {
         let local_path = local_path?;
@@ -92,7 +92,7 @@ impl FileIndex {
             });
         }
 
-        let index = std::fs::read(index_path).map_err(|e| FileIndexError::Read(kind.clone(), e))?;
+        let index = fs::read(index_path).map_err(|e| FileIndexError::Read(kind.clone(), e))?;
 
         toml::from_slice(&index).map_err(|e| FileIndexError::Deserialization(kind, e))
     }
@@ -103,30 +103,14 @@ impl FileIndex {
         }
     }
 
-    pub(crate) fn update(&self, profile: &MonjaProfile) -> Result<(), FileIndexError> {
-        let curr_path = FileIndex::path(profile, &IndexKind::Current);
-
-        if curr_path.exists() {
-            fs::copy(&curr_path, FileIndex::path(profile, &IndexKind::Previous))
-                .map_err(FileIndexError::CopyToPrevious)?;
-        }
-
-        std::fs::write(
-            &curr_path,
-            toml::to_string(self)
-                .map_err(|e| FileIndexError::Serialization(IndexKind::Current, e))?,
-        )
-        .map_err(|e| FileIndexError::Write(IndexKind::Current, e))
-    }
-
     pub(crate) fn save(
         &self,
         profile: &MonjaProfile,
-        kind: &IndexKind,
+        kind: IndexKind,
     ) -> Result<(), FileIndexError> {
-        let path = FileIndex::path(profile, kind);
+        let path = FileIndex::path(profile, &kind);
 
-        std::fs::write(
+        fs::write(
             &path,
             toml::to_string(self).map_err(|e| FileIndexError::Serialization(kind.clone(), e))?,
         )
@@ -143,6 +127,16 @@ impl FileIndex {
 
     pub(crate) fn set(&mut self, local_file: FilePath, owning_set: SetName) {
         self.set_mapping.insert(local_file, owning_set);
+    }
+
+    pub(crate) fn into_files_not_in(self, other: &FileIndex) -> Vec<FilePath> {
+        let mut old_files_since_last_pull: Vec<FilePath> = self
+            .set_mapping
+            .into_keys()
+            .filter(|f| !other.tracks(f))
+            .collect();
+        old_files_since_last_pull.sort_by(|l, r| l.as_ref().cmp(r.as_ref()));
+        old_files_since_last_pull
     }
 
     // not an AbsolutePath because the index may not exist
@@ -180,7 +174,7 @@ pub(crate) fn old_files_since_last_pull(
     let curr_index = FileIndex::load(profile, IndexKind::Current)?;
     let prev_index = FileIndex::load(profile, IndexKind::Previous)?;
 
-    let old_files = index_diff(&curr_index, prev_index);
+    let old_files = prev_index.into_files_not_in(&curr_index);
     Ok(old_files)
 }
 
@@ -284,14 +278,4 @@ fn walk(profile: &MonjaProfile) -> impl Iterator<Item = Result<FilePath, LocalWa
                 RelativePathBuf::from_path(path).expect("Generated a relative path."),
             ))
         })
-}
-
-fn index_diff(curr_index: &FileIndex, prev_index: FileIndex) -> Vec<FilePath> {
-    let mut old_files_since_last_pull: Vec<FilePath> = prev_index
-        .set_mapping
-        .into_keys()
-        .filter(|f| !curr_index.tracks(f))
-        .collect();
-    old_files_since_last_pull.sort_by(|l, r| l.as_ref().cmp(r.as_ref()));
-    old_files_since_last_pull
 }

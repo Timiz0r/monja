@@ -163,16 +163,28 @@ impl PullCommand {
 
         if !result.files_pulled.is_empty() {
             println!(
-                "Files to be pulled (including unchanged), as grouped under their corresponding sets:"
+                "Files pulled (including unchanged), as grouped under their corresponding sets:"
             );
             for (set_name, file_paths) in result.files_pulled.into_iter() {
-                eprintln!("\tSet: {}", set_name);
+                println!("\tSet: {}", set_name);
                 for path in file_paths {
-                    eprintln!("\t\t'{:?}' -> '{:?}'", path.path_in_set, path.local_path);
+                    println!("\t\t'{:?}' -> '{:?}'", path.path_in_set, path.local_path);
                 }
             }
         } else {
             println!("No files pulled.");
+        }
+
+        if !result.cleanable_files.is_empty() {
+            println!("There are files present locally that are no longer pulled from the repo.");
+            println!("If this is expected, do a `monja clean` to remove them.");
+            println!(
+                "If any are unexpected, copy them to a new set before performing `monja clean`."
+            );
+
+            for file_path in result.cleanable_files.into_iter() {
+                println!("\t{:?}", file_path);
+            }
         }
 
         Ok(())
