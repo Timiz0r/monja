@@ -58,7 +58,7 @@ pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSucce
             let files = local_state
                 .files_to_push
                 .get(set_name)
-                .expect("Will be an empty vec if set has none. Otherwise, set exists.");
+                .expect("Will be an empty vec if set has no files to push.");
 
             // lets say set shortcut is foo/bar and file baz
             // transfer looks something like this: /home/xx/foo/bar/baz -> /monja/set/baz

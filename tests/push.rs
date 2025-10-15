@@ -390,3 +390,33 @@ fn dry_run() -> Result<()> {
 
     Ok(())
 }
+
+#[gtest]
+fn ignore() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["simple"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "simple",
+        file "blueberry" "tart"
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { LocalManipulation, sim,
+        file "blueberry" "pie"
+    };
+
+    sim.configure_ignorefile("blueberry");
+
+    let push_result = monja::push(&sim.profile()?, sim.execution_options())?;
+    expect_that!(push_result.files_pushed, is_empty());
+
+    fs_operation! { SetValidation, sim, "simple",
+        file "blueberry" "tart"
+    };
+
+    Ok(())
+}

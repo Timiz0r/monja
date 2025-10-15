@@ -123,7 +123,7 @@ impl Simulator {
         self
     }
 
-    pub(crate) fn set_ignorefile(&self, ignore_spec: &str) -> &Self {
+    pub(crate) fn configure_ignorefile(&self, ignore_spec: &str) -> &Self {
         fs::write(self.local_dir.path().join(".monjaignore"), ignore_spec).unwrap();
 
         self

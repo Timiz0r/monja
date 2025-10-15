@@ -111,7 +111,7 @@ fn ignore() -> Result<()> {
         file "notinrepo" "notinrepo"
     };
 
-    sim.set_ignorefile(
+    sim.configure_ignorefile(
         "
 set2a
 set1

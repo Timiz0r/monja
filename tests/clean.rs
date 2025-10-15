@@ -89,7 +89,7 @@ fn index_clean_ignorefile() -> Result<()> {
     let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
     expect_that!(pull_result.cleanable_files, { Path::new("foo/bar") });
 
-    sim.set_ignorefile("foo/bar");
+    sim.configure_ignorefile("foo/bar");
 
     let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Index)?;
     expect_that!(clean_result.files_cleaned, is_empty());
@@ -187,7 +187,7 @@ fn full_clean_ignorefile() -> Result<()> {
         file "notinset" "notinset"
     };
 
-    sim.set_ignorefile("foo/bar\nnotinset");
+    sim.configure_ignorefile("foo/bar\nnotinset");
 
     let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Index)?;
     expect_that!(clean_result.files_cleaned, is_empty());
