@@ -4,8 +4,8 @@ use googletest::prelude::*;
 
 use crate::sim::{Simulator, set_names};
 use monja::{
-    AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, PullError,
-    RepoStateInitializationError, SetConfig, SetName,
+    AbsolutePath, MonjaProfile, MonjaProfileConfig, PullError, RepoStateInitializationError,
+    SetConfig, SetName,
 };
 
 #[allow(dead_code)]
@@ -321,7 +321,8 @@ fn set_with_empty_name() -> Result<()> {
 
 #[gtest]
 fn dry_run() -> Result<()> {
-    let sim = Simulator::create();
+    let mut sim = Simulator::create();
+    sim.dryrun(true);
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -331,11 +332,7 @@ fn dry_run() -> Result<()> {
         file "blueberry" "tart"
     };
 
-    let opts = ExecutionOptions {
-        dry_run: true,
-        verbosity: 0,
-    };
-    let _pull_result = monja::pull(&sim.profile()?, &opts)?;
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalValidation, sim,
     };

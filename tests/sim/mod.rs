@@ -18,9 +18,9 @@ use walkdir::WalkDir;
 // if we find that a test is to fragile, we can of course loosen the matching, or perhaps even come up with a better overall design.
 
 pub(crate) struct Simulator {
-    repo_dir: TempDir,
-    local_dir: TempDir,
-    data_dir: TempDir,
+    repo_root: TempDir,
+    local_root: TempDir,
+    data_root: TempDir,
 
     profile_path: AbsolutePath,
     opts: ExecutionOptions,
@@ -57,9 +57,9 @@ impl Simulator {
         profile_config.save(&profile_path).unwrap();
 
         Simulator {
-            repo_dir,
-            local_dir,
-            data_dir,
+            repo_root: repo_dir,
+            local_root: local_dir,
+            data_root: data_dir,
             profile_path,
             opts: ExecutionOptions {
                 verbosity: 0,
@@ -68,11 +68,27 @@ impl Simulator {
         }
     }
 
+    pub(crate) fn repo_root(&self) -> &Path {
+        self.repo_root.path()
+    }
+
+    pub(crate) fn local_root(&self) -> &Path {
+        self.local_root.path()
+    }
+
+    pub(crate) fn data_root(&self) -> &Path {
+        self.data_root.path()
+    }
+
+    pub(crate) fn profile_path(&self) -> &Path {
+        &self.profile_path
+    }
+
     pub(crate) fn profile(&self) -> std::result::Result<MonjaProfile, MonjaProfileConfigError> {
         // we previously stored an instance of the profile
         // however, we changed it to reading a file to get coverage of the code paths
-        let local_root = AbsolutePath::for_existing_path(self.local_dir.path()).unwrap();
-        let data_root = AbsolutePath::for_existing_path(self.data_dir.path()).unwrap();
+        let local_root = AbsolutePath::for_existing_path(self.local_root.path()).unwrap();
+        let data_root = AbsolutePath::for_existing_path(self.data_root.path()).unwrap();
 
         // NOTE: MonjaProfile::from_config just gives an io::Error, but that's getting into'd into a MonjaProfileConfigError
         // which works fine for our case, but don't be misled!
@@ -86,6 +102,12 @@ impl Simulator {
 
     pub(crate) fn execution_options(&self) -> &ExecutionOptions {
         &self.opts
+    }
+
+    pub(crate) fn dryrun(&mut self, dry_run: bool) -> &mut Self {
+        self.opts.dry_run = dry_run;
+
+        self
     }
 
     pub(crate) fn local_file_path(&self, path: &Path) -> LocalFilePath {
@@ -117,14 +139,14 @@ impl Simulator {
 
     // adding is handled by set_operation!
     pub(crate) fn rem_set(&self, set_name: SetName) -> &Self {
-        let path = self.repo_dir.path().join(set_name);
+        let path = self.repo_root.path().join(set_name);
         fs::remove_dir_all(path).unwrap();
 
         self
     }
 
     pub(crate) fn configure_ignorefile(&self, ignore_spec: &str) -> &Self {
-        fs::write(self.local_dir.path().join(".monjaignore"), ignore_spec).unwrap();
+        fs::write(self.local_root.path().join(".monjaignore"), ignore_spec).unwrap();
 
         self
     }
@@ -174,8 +196,8 @@ pub(crate) struct LocalValidation {
 impl LocalValidation {
     pub fn new(sim: &Simulator) -> Self {
         LocalValidation {
-            local_root: sim.local_dir.path().to_path_buf(),
-            repo_root: sim.repo_dir.path().to_path_buf(),
+            local_root: sim.local_root.path().to_path_buf(),
+            repo_root: sim.repo_root.path().to_path_buf(),
             general_validation: GeneralValidation::new(sim),
         }
     }
@@ -269,12 +291,12 @@ impl GeneralValidation {
 
 impl OperationHandler for GeneralValidation {
     fn dir(&mut self, path: &Path) {
-        let dir = fs::read_dir(path);
-        expect_that!(dir, ok(anything()));
+        expect_that!(path.is_dir(), is_true());
+        expect_that!(path.exists(), is_true());
     }
 
-    fn remove_dir(&mut self, _path: &Path) {
-        panic!("Not possible to remove_dir for validation.")
+    fn remove_dir(&mut self, path: &Path) {
+        expect_that!(path.exists(), is_false());
     }
 
     fn file(&mut self, path: &Path, expected_contents: &str) {
@@ -289,8 +311,8 @@ impl OperationHandler for GeneralValidation {
         };
     }
 
-    fn remove_file(&mut self, _path: &Path) {
-        panic!("Not possible to remove_file for validation.")
+    fn remove_file(&mut self, path: &Path) {
+        expect_that!(path.exists(), is_false());
     }
 
     fn finish(self) {}

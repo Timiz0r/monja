@@ -4,8 +4,8 @@ use googletest::prelude::*;
 
 use crate::sim::{Simulator, set_names};
 use monja::{
-    AbsolutePath, ExecutionOptions, LocalStateInitializationError, MonjaProfileConfig,
-    MonjaProfileConfigError, PushError, SetName,
+    AbsolutePath, LocalStateInitializationError, MonjaProfileConfig, MonjaProfileConfigError,
+    PushError, SetName,
 };
 
 #[allow(dead_code)]
@@ -340,7 +340,7 @@ fn index_based_directory_traversal_relative() -> Result<()> {
 
 #[gtest]
 fn dry_run() -> Result<()> {
-    let sim = Simulator::create();
+    let mut sim = Simulator::create();
     sim.configure_profile(|old| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         ..old
@@ -369,11 +369,8 @@ fn dry_run() -> Result<()> {
         file "newfile" "newfile"
     };
 
-    let opts = ExecutionOptions {
-        dry_run: true,
-        verbosity: 0,
-    };
-    let _push_result = monja::push(&sim.profile()?, &opts)?;
+    sim.dryrun(true);
+    let _push_result = monja::push(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { SetValidation, sim, "simple",
         dir "foo"
