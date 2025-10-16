@@ -21,20 +21,19 @@ pub(crate) mod local;
 pub(crate) mod repo;
 pub mod operation {
     pub mod clean;
-    pub mod fix;
     pub mod init;
     pub mod pull;
     pub mod push;
+    pub mod put;
     pub mod status;
 }
 
 pub use crate::{
-    operation::clean::*, operation::fix::*, operation::init::*, operation::pull::*,
-    operation::push::*, operation::status::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
+    operation::clean::*, operation::init::*, operation::pull::*, operation::push::*,
+    operation::put::*, operation::status::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
     repo::SetShortcutError,
 };
 
-//note that file index error is internal implementation detail
 pub type LocalStateInitializationError = local::StateInitializationError;
 pub type RepoStateInitializationError = repo::StateInitializationError;
 

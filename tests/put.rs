@@ -30,14 +30,14 @@ fn fix_missing_set() -> Result<()> {
     let push_result = monja::push(&sim.profile()?, sim.execution_options());
     expect_that!(push_result, err(pat!(PushError::Consistency { .. })));
 
-    let fix_result = monja::fix(
+    let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
         &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
-    expect_that!(fix_result.owning_set, pat!(SetName("set2")));
-    expect_that!(fix_result.files, { eq(Path::new("blueberry")) });
+    expect_that!(put_result.owning_set, pat!(SetName("set2")));
+    expect_that!(put_result.files, { eq(Path::new("blueberry")) });
 
     let _push_result = monja::push(&sim.profile()?, sim.execution_options())?;
 
@@ -68,14 +68,14 @@ fn fix_missing_files() -> Result<()> {
     let push_result = monja::push(&sim.profile()?, sim.execution_options());
     expect_that!(push_result, err(pat!(PushError::Consistency { .. })));
 
-    let fix_result = monja::fix(
+    let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
         &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
-    expect_that!(fix_result.owning_set, pat!(SetName("set2")));
-    expect_that!(fix_result.files, { eq(Path::new("blueberry")) });
+    expect_that!(put_result.owning_set, pat!(SetName("set2")));
+    expect_that!(put_result.files, { eq(Path::new("blueberry")) });
 
     // succeeding is good enough
     let _push_result = monja::push(&sim.profile()?, sim.execution_options())?;
@@ -105,14 +105,14 @@ fn fix_missing_set_dryrun() -> Result<()> {
     expect_that!(push_result, err(pat!(PushError::Consistency { .. })));
 
     sim.dryrun(true);
-    let fix_result = monja::fix(
+    let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
         &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
-    expect_that!(fix_result.owning_set, pat!(SetName("set2")));
-    expect_that!(fix_result.files, { eq(Path::new("blueberry")) });
+    expect_that!(put_result.owning_set, pat!(SetName("set2")));
+    expect_that!(put_result.files, { eq(Path::new("blueberry")) });
 
     fs_operation! { SetValidation, sim, "set2",
         remfile "blueberry"
@@ -154,14 +154,14 @@ fn fix_missing_files_dryrun() -> Result<()> {
     expect_that!(push_result, err(pat!(PushError::Consistency { .. })));
 
     sim.dryrun(true);
-    let fix_result = monja::fix(
+    let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
         &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
-    expect_that!(fix_result.owning_set, pat!(SetName("set2")));
-    expect_that!(fix_result.files, { eq(Path::new("blueberry")) });
+    expect_that!(put_result.owning_set, pat!(SetName("set2")));
+    expect_that!(put_result.files, { eq(Path::new("blueberry")) });
 
     fs_operation! { SetValidation, sim, "set2",
         remfile "blueberry"

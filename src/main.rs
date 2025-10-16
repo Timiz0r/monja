@@ -25,7 +25,7 @@ enum Commands {
     Push(PushCommand),
     Pull(PullCommand),
     Clean(CleanCommand),
-    Fix(FixCommand),
+    Put(PutCommand),
     ChangeProfile(ChangeProfileCommand),
     LocalStatus(StatusCommand),
     RepoDir(RepoDirCommand),
@@ -41,7 +41,7 @@ impl Commands {
             Commands::Push(command) => command.execute(profile, opts),
             Commands::Pull(command) => command.execute(profile, opts),
             Commands::Clean(command) => command.execute(profile, opts),
-            Commands::Fix(command) => command.execute(profile, opts),
+            Commands::Put(command) => command.execute(profile, opts),
             Commands::ChangeProfile(command) => command.execute(profile, opts),
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
@@ -171,7 +171,7 @@ impl PushCommand {
                 "\t* If the files should use a different set (such as the last specified in monja-profile.toml), "
             );
             eprint!(
-                "use some variation of `monja fix` to specify that set and copy files to that set. "
+                "use some variation of `monja put` to specify that set and copy files to that set. "
             );
             eprintln!("Then, use `monja push` to push the rest of the files to the right set.");
 
@@ -261,7 +261,7 @@ impl CleanCommand {
 }
 
 #[derive(Args)]
-struct FixCommand {
+struct PutCommand {
     #[arg(long)]
     owning_set: String,
 
@@ -272,12 +272,12 @@ struct FixCommand {
     files: Vec<PathBuf>,
 }
 
-impl FixCommand {
+impl PutCommand {
     fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         let cwd = std::env::current_dir()?;
         let files = to_local_paths(&profile, &self.files, &cwd, self.nocwd)?;
 
-        let result = monja::fix(&profile, &opts, &files, SetName(self.owning_set))?;
+        let result = monja::put(&profile, &opts, &files, SetName(self.owning_set))?;
 
         println!(
             "Successfully changed the following files to use set `{}` (including copying them to the set):",
