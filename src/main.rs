@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use monja::{
-    AbsolutePath, CleanMode, ExecutionOptions, LocalFilePath, MonjaProfile, SetName, clean,
-    operation::status::local_status,
+    AbsolutePath, CleanMode, ExecutionOptions, InitSpec, LocalFilePath, MonjaProfile, SetName,
+    clean, operation::status::local_status,
 };
 
 use clap::{Args, Parser, Subcommand, command};
@@ -35,7 +35,9 @@ enum Commands {
 impl Commands {
     fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         match self {
-            Commands::Init(command) => command.execute(profile, opts),
+            Commands::Init(_) => {
+                panic!("Init command should have a separate invocation path.")
+            }
             Commands::Push(command) => command.execute(profile, opts),
             Commands::Pull(command) => command.execute(profile, opts),
             Commands::Clean(command) => command.execute(profile, opts),
@@ -49,8 +51,47 @@ impl Commands {
 #[derive(Args)]
 struct InitCommand {}
 impl InitCommand {
-    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
-        todo!()
+    fn execute(
+        &self,
+        opts: ExecutionOptions,
+        profile_config_path: PathBuf,
+        local_root: AbsolutePath,
+        data_root: AbsolutePath,
+        base: &xdg::BaseDirectories,
+    ) -> anyhow::Result<()> {
+        let repo_root = base.create_data_directory("repo")?;
+        let repo_root = AbsolutePath::for_existing_path(&repo_root)?;
+        let relative_repo_root = repo_root
+            .strip_prefix(base.get_data_home().expect("Should exist."))
+            .expect("Should naturally be a prefix")
+            .to_path_buf();
+
+        let spec = InitSpec {
+            profile_config_path,
+            local_root,
+            repo_root,
+            data_root,
+            relative_repo_root,
+        };
+        let result = monja::init(&opts, spec)?;
+
+        match result.profile {
+            Some(profile) => {
+                println!("Initialization successful!");
+                println!(
+                    "Profile can be found in '{}'.",
+                    profile.local_root.display()
+                );
+                println!("Repo can be found in '{}'.", profile.repo_root.display());
+                println!(
+                    "Set '{}' automatically created.",
+                    profile.config.target_sets[0]
+                );
+            }
+            None => println!("No changed made because dry-run."),
+        };
+
+        Ok(())
     }
 }
 
@@ -350,20 +391,25 @@ impl ChangeProfileCommand {
 fn main() -> anyhow::Result<()> {
     let base = xdg::BaseDirectories::with_prefix("monja");
 
+    let profile_config_path = base.place_config_file("monja-profile.toml")?;
+
+    let local_root = std::env::home_dir().expect("We got bigger problems if there's no home.");
+    let local_root = AbsolutePath::for_existing_path(&local_root)?;
+
     let data_root = base
         .get_data_home()
         .expect("We got bigger problems if there's no home.");
     let data_root = AbsolutePath::for_existing_path(&data_root)?;
 
-    let profile_config_path =
-        AbsolutePath::for_existing_path(&base.place_config_file("monja-profile.toml")?)?;
-    let profile_config = monja::MonjaProfileConfig::load(&profile_config_path)?;
+    let cli = Cli::parse();
+    if let Commands::Init(init) = cli.command {
+        return init.execute(cli.opts, profile_config_path, local_root, data_root, &base);
+    }
 
-    let local_root = std::env::home_dir().expect("We got bigger problems if there's no home.");
-    let local_root = AbsolutePath::for_existing_path(&local_root)?;
+    let profile_config_path = AbsolutePath::for_existing_path(&profile_config_path)?;
+    let profile_config = monja::MonjaProfileConfig::load(&profile_config_path)?;
 
     let profile = monja::MonjaProfile::from_config(profile_config, local_root, data_root)?;
 
-    let cli = Cli::parse();
     cli.command.execute(profile, cli.opts)
 }

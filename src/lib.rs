@@ -22,14 +22,15 @@ pub(crate) mod repo;
 pub mod operation {
     pub mod clean;
     pub mod fix;
+    pub mod init;
     pub mod pull;
     pub mod push;
     pub mod status;
 }
 
 pub use crate::{
-    operation::clean::*, operation::fix::*, operation::pull::*, operation::push::*,
-    operation::status::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
+    operation::clean::*, operation::fix::*, operation::init::*, operation::pull::*,
+    operation::push::*, operation::status::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
     repo::SetShortcutError,
 };
 
@@ -42,6 +43,8 @@ pub type RepoStateInitializationError = repo::StateInitializationError;
 pub struct MonjaProfileConfig {
     pub repo_dir: PathBuf,
     pub target_sets: Vec<SetName>,
+
+    // TODO: probably remove
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_file_set: Option<SetName>,
 }
@@ -89,9 +92,14 @@ impl MonjaProfile {
         local_root: AbsolutePath,
         data_root: AbsolutePath,
     ) -> Result<MonjaProfile, std::io::Error> {
+        let repo_root = match config.repo_dir.is_relative() {
+            true => AbsolutePath::for_existing_path(&local_root.join(&config.repo_dir))?,
+            false => AbsolutePath::for_existing_path(&config.repo_dir)?,
+        };
+
         Ok(MonjaProfile {
             local_root,
-            repo_root: AbsolutePath::for_existing_path(&config.repo_dir)?,
+            repo_root,
             data_root,
             config,
         })

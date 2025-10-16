@@ -8,13 +8,16 @@ use crate::{
 pub enum PushError {
     #[error("Unable to initialize repo state.")]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
+
     #[error("Unable to initialize local state.")]
     LocalStateInitialization(#[from] local::StateInitializationError),
+
     #[error("The local index and repo were found to be out of sync.")]
     Consistency {
         files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
         missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
     },
+
     #[error("Failed to copy files via rsync.")]
     Rsync(#[source] std::io::Error),
 }
