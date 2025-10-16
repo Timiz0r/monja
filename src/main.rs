@@ -27,8 +27,9 @@ enum Commands {
     Pull(PullCommand),
     Clean(CleanCommand),
     Fix(FixCommand),
-    LocalStatus(StatusCommand),
     ChangeProfile(ChangeProfileCommand),
+    LocalStatus(StatusCommand),
+    RepoDir(RepoDirCommand),
 }
 
 // TODO: macro?
@@ -42,8 +43,9 @@ impl Commands {
             Commands::Pull(command) => command.execute(profile, opts),
             Commands::Clean(command) => command.execute(profile, opts),
             Commands::Fix(command) => command.execute(profile, opts),
-            Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::ChangeProfile(command) => command.execute(profile, opts),
+            Commands::LocalStatus(command) => command.execute(profile, opts),
+            Commands::RepoDir(command) => command.execute(profile, opts),
         }
     }
 }
@@ -377,6 +379,16 @@ impl StatusCommand {
                 }
             }
         }
+    }
+}
+
+#[derive(Args)]
+struct RepoDirCommand {}
+impl RepoDirCommand {
+    fn execute(&self, profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
+        println!("{}", profile.repo_root.display());
+
+        Ok(())
     }
 }
 
