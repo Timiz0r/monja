@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, RepoFilePath, SetName,
-    convert_set_file_result, local, repo, rsync,
+    convert_set_repofile_result, local, repo, rsync,
 };
 
 #[derive(Error, Debug)]
@@ -120,7 +120,7 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
         prev_index.save(profile, local::IndexKind::Previous)?;
     }
 
-    let files_pulled = convert_set_file_result(&profile.config.target_sets, files_to_pull);
+    let files_pulled = convert_set_repofile_result(&profile.config.target_sets, files_to_pull);
     let cleanable_files = prev_index
         .into_files_not_in(profile, &updated_index)?
         .into_iter()

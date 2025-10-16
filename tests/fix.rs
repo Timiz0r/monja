@@ -33,7 +33,7 @@ fn fix_missing_set() -> Result<()> {
     let fix_result = monja::fix(
         &sim.profile()?,
         sim.execution_options(),
-        &[sim.local_file_path("blueberry".as_ref())],
+        &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
     expect_that!(fix_result.owning_set, pat!(SetName("set2")));
@@ -71,7 +71,7 @@ fn fix_missing_files() -> Result<()> {
     let fix_result = monja::fix(
         &sim.profile()?,
         sim.execution_options(),
-        &[sim.local_file_path("blueberry".as_ref())],
+        &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
     expect_that!(fix_result.owning_set, pat!(SetName("set2")));
@@ -108,7 +108,7 @@ fn fix_missing_set_dryrun() -> Result<()> {
     let fix_result = monja::fix(
         &sim.profile()?,
         sim.execution_options(),
-        &[sim.local_file_path("blueberry".as_ref())],
+        &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
     expect_that!(fix_result.owning_set, pat!(SetName("set2")));
@@ -118,7 +118,7 @@ fn fix_missing_set_dryrun() -> Result<()> {
         remfile "blueberry"
     };
 
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(status.files_with_missing_sets, {
         (
             pat!(SetName("set1")),
@@ -157,7 +157,7 @@ fn fix_missing_files_dryrun() -> Result<()> {
     let fix_result = monja::fix(
         &sim.profile()?,
         sim.execution_options(),
-        &[sim.local_file_path("blueberry".as_ref())],
+        &[sim.local_path("blueberry".as_ref())],
         SetName("set2".into()),
     )?;
     expect_that!(fix_result.owning_set, pat!(SetName("set2")));
@@ -167,7 +167,7 @@ fn fix_missing_files_dryrun() -> Result<()> {
         remfile "blueberry"
     };
 
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(status.missing_files, {
         (
             pat!(SetName("set1")),

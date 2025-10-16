@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use monja::{
     AbsolutePath, CleanMode, ExecutionOptions, InitSpec, LocalFilePath, MonjaProfile, SetName,
-    clean, operation::status::local_status,
 };
 
 use clap::{Args, Parser, Subcommand, command};
@@ -246,7 +245,7 @@ impl CleanCommand {
             true => CleanMode::Full,
             false => CleanMode::Index,
         };
-        let clean_result = clean(&profile, &opts, mode)?;
+        let clean_result = monja::clean(&profile, &opts, mode)?;
 
         if !clean_result.files_cleaned.is_empty() {
             println!("Local files cleaned:");
@@ -266,18 +265,17 @@ struct FixCommand {
     #[arg(long)]
     owning_set: String,
 
+    #[arg(long)]
+    nocwd: bool,
+
     // TODO: also allow stdin
     files: Vec<PathBuf>,
 }
 
 impl FixCommand {
     fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
-        let files: Result<Vec<LocalFilePath>, monja::LocalFilePathConversionError> = self
-            .files
-            .iter()
-            .map(|f| LocalFilePath::from(&profile, f))
-            .collect();
-        let files: Vec<LocalFilePath> = files?;
+        let cwd = std::env::current_dir()?;
+        let files = to_local_paths(&profile, &self.files, &cwd, self.nocwd)?;
 
         let result = monja::fix(&profile, &opts, &files, SetName(self.owning_set))?;
 
@@ -295,6 +293,9 @@ impl FixCommand {
 
 #[derive(Args)]
 struct StatusCommand {
+    #[arg(long)]
+    nocwd: bool,
+
     location: Option<PathBuf>,
 
     #[command(flatten)]
@@ -315,19 +316,22 @@ struct StatusFilter {
 }
 impl StatusCommand {
     fn execute(&self, profile: MonjaProfile, _: ExecutionOptions) -> anyhow::Result<()> {
-        let status = local_status(&profile)?;
+        let cwd = std::env::current_dir()?;
+        let location = to_local_path(
+            &profile,
+            self.location.as_deref().unwrap_or(".".as_ref()),
+            &cwd,
+            self.nocwd,
+        )?;
+        let status = monja::local_status(&profile, location)?;
 
-        let location = self
-            .location
-            .as_deref()
-            .unwrap_or(".".as_ref())
-            .canonicalize()?;
+        // TODO: revisit passing this to local_status
+        // will probably pass cwd-rooted files for put command
 
         if self.filter.as_ref().is_none_or(|f| f.sets_missing) {
             print(
                 "Sets missing, as well as the files that currently require them:",
                 status.files_with_missing_sets,
-                &location,
             );
         }
 
@@ -335,7 +339,6 @@ impl StatusCommand {
             print(
                 "Files missing, as grouped under the sets they were expected to be in:",
                 status.missing_files,
-                &location,
             );
         }
 
@@ -357,25 +360,17 @@ impl StatusCommand {
             print(
                 "Files to push (including unchanged), as grouped under their corresponding sets:",
                 status.files_to_push,
-                &location,
             );
         }
 
         return Ok(());
 
-        fn print(message: &str, info: Vec<(SetName, Vec<LocalFilePath>)>, location: &Path) {
+        fn print(message: &str, info: Vec<(SetName, Vec<LocalFilePath>)>) {
             println!("{}", message);
             for (set_name, file_paths) in info {
                 println!("\tSet: {}", set_name);
                 for path in file_paths {
-                    let abs = {
-                        let this: &Path = &path;
-                        this
-                    }
-                    .canonicalize();
-                    if abs.is_ok_and(|p| p.starts_with(location)) {
-                        println!("\t\t{:?}", path);
-                    }
+                    println!("\t\t{:?}", path);
                 }
             }
         }
@@ -424,4 +419,38 @@ fn main() -> anyhow::Result<()> {
     let profile = monja::MonjaProfile::from_config(profile_config, local_root, data_root)?;
 
     cli.command.execute(profile, cli.opts)
+}
+
+// commands that take local paths have a nocwd arg in order to be more easily used with fzf, etc
+// where operations using external tools will preferably use paths relative to local_root
+fn to_local_path(
+    profile: &MonjaProfile,
+    path: &Path,
+    cwd: &Path,
+    no_cwd: bool,
+) -> anyhow::Result<LocalFilePath> {
+    let cwd = match no_cwd {
+        true => &profile.local_root,
+        false => cwd,
+    };
+    Ok(LocalFilePath::from(profile, path, cwd)?)
+}
+
+fn to_local_paths(
+    profile: &MonjaProfile,
+    // impl trait allows us to use &vec instead of using an iterator that maps to &Path.
+    // however, this is just for convenience, as we still use .collect instead of preallocating a vec, for Result reasons
+    files: &[impl AsRef<Path>],
+    cwd: &Path,
+    no_cwd: bool,
+) -> anyhow::Result<Vec<LocalFilePath>> {
+    let cwd = match no_cwd {
+        true => &profile.local_root,
+        false => cwd,
+    };
+    let files: Result<Vec<LocalFilePath>, monja::LocalFilePathError> = files
+        .iter()
+        .map(|f| LocalFilePath::from(profile, f.as_ref(), cwd))
+        .collect();
+    Ok(files?)
 }

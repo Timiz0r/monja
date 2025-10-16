@@ -84,6 +84,19 @@ impl Simulator {
         &self.profile_path
     }
 
+    pub(crate) fn local_path(&self, path: &Path) -> LocalFilePath {
+        LocalFilePath::from(&self.profile().unwrap(), path, self.local_root.path()).unwrap()
+    }
+
+    pub(crate) fn cwd(&self) -> LocalFilePath {
+        LocalFilePath::from(
+            &self.profile().unwrap(),
+            self.local_root.path(),
+            self.local_root.path(),
+        )
+        .unwrap()
+    }
+
     pub(crate) fn profile(&self) -> std::result::Result<MonjaProfile, MonjaProfileConfigError> {
         // we previously stored an instance of the profile
         // however, we changed it to reading a file to get coverage of the code paths
@@ -108,10 +121,6 @@ impl Simulator {
         self.opts.dry_run = dry_run;
 
         self
-    }
-
-    pub(crate) fn local_file_path(&self, path: &Path) -> LocalFilePath {
-        LocalFilePath::from(&self.profile().unwrap(), path).unwrap()
     }
 
     pub(crate) fn configure_profile<P>(&self, mut config: P) -> &Self

@@ -48,7 +48,7 @@ impl FilePath {
         let mut local_path = RelativePathBuf::new();
         local_path.push(shortcut);
         local_path.push(&path_in_set);
-        let local_path = local::FilePath::new(local_path);
+        let local_path = local_path.into();
 
         FilePath {
             path_in_set,

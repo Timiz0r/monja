@@ -55,7 +55,7 @@ fn ignorefile_exceptions_correct() -> Result<()> {
         end
     };
 
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(status.untracked_files, {
         eq(Path::new(".config/notinrepo"))
     });

@@ -80,12 +80,16 @@ pub(crate) fn retrieve_state(
 pub(crate) struct FilePath(RelativePathBuf);
 
 impl FilePath {
-    pub(crate) fn new(object_path: RelativePathBuf) -> FilePath {
-        FilePath(object_path)
-    }
-
     pub(crate) fn to_path(&self, base: &Path) -> PathBuf {
         self.0.to_path(base)
+    }
+
+    pub(crate) fn is_child_of(&self, base: &Self) -> bool {
+        self.0.starts_with(&base.0)
+    }
+
+    pub fn current_location() -> Self {
+        FilePath(RelativePathBuf::new())
     }
 }
 
@@ -95,18 +99,33 @@ impl AsRef<RelativePath> for FilePath {
     }
 }
 
-// kinda ideally dont want to do this, but this is easiest way to get it (de)serialized
 impl From<FilePath> for std::path::PathBuf {
     fn from(value: FilePath) -> Self {
         value.0.to_path("") // aka dont specify a base and keep it relative
     }
 }
 
-impl TryFrom<std::path::PathBuf> for FilePath {
+// unlike the more public LocalFilePath, we do attempt to allow conversions from Path/PathBuf,
+// under the assumption that we've done it correctly.
+impl TryFrom<PathBuf> for FilePath {
     type Error = relative_path::FromPathError;
 
-    fn try_from(value: std::path::PathBuf) -> Result<Self, Self::Error> {
+    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
         Ok(FilePath(RelativePathBuf::from_path(value)?))
+    }
+}
+
+impl TryFrom<&Path> for FilePath {
+    type Error = relative_path::FromPathError;
+
+    fn try_from(value: &Path) -> Result<Self, Self::Error> {
+        Ok(FilePath(RelativePathBuf::from_path(value)?))
+    }
+}
+
+impl From<RelativePathBuf> for FilePath {
+    fn from(value: RelativePathBuf) -> Self {
+        FilePath(value)
     }
 }
 

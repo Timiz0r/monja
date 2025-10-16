@@ -39,7 +39,7 @@ fn status() -> Result<()> {
         file "notinrepo" "notinrepo"
     };
 
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(status.files_to_push, {
         (
             pat!(SetName("set2")),
@@ -65,7 +65,7 @@ fn status() -> Result<()> {
         ..old
     });
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(
         status.untracked_files,
         {
@@ -84,6 +84,72 @@ fn status() -> Result<()> {
 
     Ok(())
 }
+
+#[gtest]
+fn subdir() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        file "q" "q"
+        dir "subdir"
+            file "a" "a"
+            file "b" "b"
+        end
+    };
+
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { LocalManipulation, sim,
+        file "notinrepo" "notinrepo"
+        dir "subdir"
+            file "notinrepo2" "notinrepo2"
+        end
+    };
+
+    fs_operation! { SetManipulation, sim, "set1",
+        dir "subdir"
+            remfile "a"
+        end
+    };
+
+    let status = monja::local_status(&sim.profile()?, sim.local_path("subdir".as_ref()))?;
+    expect_that!(status.files_to_push, {
+        (
+            pat!(SetName("set1")),
+            unordered_elements_are![eq(Path::new("subdir/b"))],
+        )
+    });
+    expect_that!(status.files_with_missing_sets, is_empty());
+    expect_that!(status.missing_files, {
+        (
+            pat!(SetName("set1")),
+            unordered_elements_are![eq(Path::new("subdir/a"))],
+        )
+    });
+    expect_that!(status.untracked_files, {
+        eq(Path::new("subdir/notinrepo2"))
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+        remfile "q"
+        dir "subdir"
+            remfile "b"
+        end
+    };
+    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    let status = monja::local_status(&sim.profile()?, sim.local_path("subdir".as_ref()))?;
+    expect_that!(status.old_files_after_last_pull, {
+        eq(Path::new("subdir/a")),
+        eq(Path::new("subdir/b"))
+    });
+
+    Ok(())
+}
+
 #[gtest]
 fn ignore() -> Result<()> {
     let sim = Simulator::create();
@@ -120,7 +186,7 @@ notinrepo
     ",
     );
 
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     // an argument can be made that this should contain files in the index (and don't fall under the other categories),
     // like when we manually commit files that are in .gitignore.
     // one reason we're not doing that is because it's hard to do with the ignore crate.
@@ -136,7 +202,7 @@ notinrepo
     });
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
 
-    let status = monja::local_status(&sim.profile()?)?;
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(status.old_files_after_last_pull, is_empty());
 
     Ok(())

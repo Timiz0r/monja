@@ -38,14 +38,17 @@ Of course, keep in mind that creating an issue may be adviseable for large-scope
 
 ## Features on the todo list
 * Packages
+  * Key feature. Support any package manager.
 * Git hook to warn against `git pull`ing when a `monja push` hasn't been done recently.
+  * Key feature
+* End-to-end tests
+  * The monja executable expects to be called in certain ways and has some logic dealing with paths.
 * Permissions
+  * Not too important. Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
 * Diff/merge between local and sets
+  * QoL
 
 The thoughts on these should eventually make it to an issue somewhere.
-Package support and git hook support is the main feature to add.
-Permissions aren't too important. Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
-Diff/merge is a QoL thing.
 
 ## Design
 Probably the most incomplete section of them all!

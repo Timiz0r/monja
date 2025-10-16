@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile, convert_set_file_result, local, repo, rsync,
+    ExecutionOptions, LocalFilePath, MonjaProfile, convert_set_localfile_result, local, repo, rsync,
 };
 
 #[derive(Error, Debug)]
@@ -32,12 +32,16 @@ pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSucce
     let local_state = local::retrieve_state(profile, &repo)?;
 
     if !local_state.files_with_missing_sets.is_empty() || !local_state.missing_files.is_empty() {
-        let files_with_missing_sets = convert_set_file_result(
+        let files_with_missing_sets = convert_set_localfile_result(
             &profile.config.target_sets,
             local_state.files_with_missing_sets,
+            &local::FilePath::current_location(),
         );
-        let missing_files =
-            convert_set_file_result(&profile.config.target_sets, local_state.missing_files);
+        let missing_files = convert_set_localfile_result(
+            &profile.config.target_sets,
+            local_state.missing_files,
+            &local::FilePath::current_location(),
+        );
 
         return Err(PushError::Consistency {
             files_with_missing_sets,
@@ -79,7 +83,10 @@ pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSucce
         }
     }
 
-    let files_pushed =
-        convert_set_file_result(&profile.config.target_sets, local_state.files_to_push);
+    let files_pushed = convert_set_localfile_result(
+        &profile.config.target_sets,
+        local_state.files_to_push,
+        &local::FilePath::current_location(),
+    );
     Ok(PushSuccess { files_pushed })
 }
