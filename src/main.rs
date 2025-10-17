@@ -82,6 +82,7 @@ enum Commands {
     LocalStatus(StatusCommand),
 
     /// Prints the repo's directory so that it can be piped into `cd`.
+    #[command(id = "repodir")]
     RepoDir(RepoDirCommand),
 }
 
@@ -712,6 +713,9 @@ fn read_paths_interactively(profile: &MonjaProfile) -> anyhow::Result<Vec<LocalF
 
     let output = child.wait_with_output()?;
     if !output.status.success() {
+        if output.status.code() == Some(130) {
+            return Ok(Vec::new());
+        }
         return Err(anyhow!(
             "Failed to run fzf: {:?}\n{}",
             output.status.code(),
