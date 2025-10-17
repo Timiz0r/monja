@@ -26,7 +26,7 @@ Additionally, it's up to the user to figure out the best way to handle complicat
 | Local      | Typically `~/`. We *push* files from here to the *repo*.                                                                                     |
 | Profile    | Defined by a file in `~/.config/monja/monja-profile.toml` called `monja-profile.toml`. Mainly defines which *sets* are used from the *repo*. |
 | Push       | The operation that puts files that have been updated back into the *repo*.                                                                   |
-| Pull       | The operation that copies files from the repo to local.                                                                                      |
+| Pull       | The operation that copies files from the *repo* to local.                                                                                    |
 
 ## New features and functionality
 Be sure to open an issue or find an existing one to discuss beforehand,
@@ -42,7 +42,7 @@ Of course, keep in mind that creating an issue may be adviseable for large-scope
 * Git hook to warn against `git pull`ing when a `monja push` hasn't been done recently.
   * Key feature
 * End-to-end tests
-  * The monja executable expects to be called in certain ways and has some logic dealing with paths.
+  * We'd mainly test that we can invoke the executable correctly, not necessarily every scenario of each subcommand.
 * Permissions
   * Not too important. Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
 * Diff/merge between local and sets

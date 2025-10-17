@@ -108,8 +108,11 @@ impl PushCommand {
             missing_files,
         }) = result
         {
+            let mut print_generic = false;
             if !files_with_missing_sets.is_empty() {
-                print_common_error("There are local files whose corresponding sets are missing.");
+                print_generic = true;
+
+                eprintln!("There are local files whose corresponding sets are missing.");
 
                 eprintln!("Sets missing, as well as the files that currently require them:");
                 for (set_name, file_paths) in files_with_missing_sets {
@@ -120,7 +123,9 @@ impl PushCommand {
                 }
             }
             if !missing_files.is_empty() {
-                print_common_error("There are local files missing from expected sets.");
+                print_generic = true;
+
+                eprintln!("There are local files missing from expected sets.");
 
                 eprintln!("Files missing, as grouped under the sets they were expected to be in:");
                 for (set_name, file_paths) in missing_files {
@@ -130,6 +135,36 @@ impl PushCommand {
                     }
                 }
             }
+
+            if print_generic {
+                eprint!(
+                    "This happens due to changes being made in the repo without having yet pulled."
+                );
+                eprint!(
+                    "It is recommended to `monja push` before doing a `git pull` or other repo modification."
+                );
+                eprintln!("To fix this, consider doing any of the the following:");
+
+                eprintln!(
+                    "\t* If there are no local changes that would get overwritten, use `monja pull`."
+                );
+
+                eprint!(
+                    "\t* If the files should use a different set (such as the last specified in monja-profile.toml), "
+                );
+                eprint!(
+                    "use some variation of `monja put --update-index` to specify that set and copy files to that set. "
+                );
+                eprintln!("Then, use `monja push` to push the rest of the files to the right set.");
+
+                eprint!("\t* If the file is no longer needed, simply delete it. ");
+                eprintln!(
+                    "Then, use `monja push` to push these and the rest of the files to the right set."
+                );
+
+                eprintln!("\t* Manually merge local changes into the repo, then `monja pull`.");
+            }
+
             // probably something better to use, but we don't want to double log with the below `result?`.
             return Err(anyhow::Error::msg("Failed to push."));
         }
@@ -151,37 +186,7 @@ impl PushCommand {
             println!("No files pushed.");
         }
 
-        return Ok(());
-
-        fn print_common_error(description: &str) {
-            eprint!("{}", description);
-            eprint!(
-                "This happens due to changes being made in the repo without having yet pulled."
-            );
-            eprint!(
-                "It is recommended to `monja push` before doing a `git pull` or other repo modification."
-            );
-            eprintln!("To fix this, consider doing any of the the following:");
-
-            eprintln!(
-                "\t* If there are no local changes that would get overwritten, use `monja pull`."
-            );
-
-            eprint!(
-                "\t* If the files should use a different set (such as the last specified in monja-profile.toml), "
-            );
-            eprint!(
-                "use some variation of `monja put` to specify that set and copy files to that set. "
-            );
-            eprintln!("Then, use `monja push` to push the rest of the files to the right set.");
-
-            eprint!("\t* If the file is no longer needed, simply delete it. ");
-            eprintln!(
-                "Then, use `monja push` to push these and the rest of the files to the right set."
-            );
-
-            eprintln!("\t* Manually merge local changes into the repo, then `monja pull`.");
-        }
+        Ok(())
     }
 }
 
@@ -268,6 +273,9 @@ struct PutCommand {
     #[arg(long)]
     nocwd: bool,
 
+    #[arg()]
+    update_index: bool,
+
     // TODO: also allow stdin
     files: Vec<PathBuf>,
 }
@@ -277,14 +285,50 @@ impl PutCommand {
         let cwd = std::env::current_dir()?;
         let files = to_local_paths(&profile, &self.files, &cwd, self.nocwd)?;
 
-        let result = monja::put(&profile, &opts, &files, SetName(self.owning_set))?;
+        let result = monja::put(
+            &profile,
+            &opts,
+            files,
+            SetName(self.owning_set),
+            self.update_index,
+        )?;
 
         println!(
             "Successfully changed the following files to use set `{}` (including copying them to the set):",
             result.owning_set
         );
         for file in result.files.into_iter() {
-            println!("\t{:?}", &file);
+            println!("\t{:?}", file);
+        }
+
+        if !result.set_is_targeted {
+            println!(
+                "Note that set `{}` isn't targeted by the current profile, so it will not be eligible to be copied by `monja pull`.",
+                result.owning_set
+            );
+        }
+
+        if !result.files_in_later_sets.is_empty() {
+            println!(
+                "There were some files put into set `{0}` that, because they are also in sets later than `{0}`, wouldn't be copied by `monja pull`.",
+                result.owning_set
+            );
+            for (path, set_names) in result.files_in_later_sets.into_iter() {
+                println!("\t{:?}", path);
+                for set_name in set_names.into_iter() {
+                    println!("\t\t{}", set_name);
+                }
+            }
+        }
+
+        if !result.untracked_files.is_empty() {
+            println!(
+                "There were some files put into set `{}` that aren't in any of the sets used by the current profile.",
+                result.owning_set
+            );
+            for file in result.untracked_files.into_iter() {
+                println!("\t{:?}", file);
+            }
         }
 
         Ok(())

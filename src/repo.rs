@@ -25,17 +25,43 @@ impl Set {
     }
 
     // returns PathBuf because AbsolutePath requires the file exist
-    pub(crate) fn get_repo_absolute_path_for(&self, local_path: &local::FilePath) -> PathBuf {
-        self.get_repo_relative_path_for(local_path)
-            .to_path(&self.root)
+    pub(crate) fn get_repo_absolute_path_for(
+        &self,
+        local_path: &local::FilePath,
+    ) -> Result<PathBuf, SetPathError> {
+        Ok(self
+            .get_repo_relative_path_for(local_path)?
+            .to_path(&self.root))
     }
 
     pub(crate) fn get_repo_relative_path_for(
         &self,
         local_path: &local::FilePath,
-    ) -> RelativePathBuf {
-        self.shortcut.relative(local_path)
+    ) -> Result<RelativePathBuf, SetPathError> {
+        let path = self.shortcut.relative(local_path);
+
+        //  for `shortcut=foo/bar; path=foo/baz.file` we should fail
+        match path.components().next() {
+            Some(relative_path::Component::ParentDir) => Err(SetPathError::OutsideOfSet {
+                shortcut: self.shortcut.to_path(""),
+                path: local_path.to_path("".as_ref()),
+            }),
+            None => Err(SetPathError::NotSure {
+                shortcut: self.shortcut.to_path(""),
+                path: local_path.to_path("".as_ref()),
+            }),
+            _ => Ok(path),
+        }
     }
+}
+
+#[derive(Error, Debug)]
+pub enum SetPathError {
+    #[error("The local file path of '{path}' fall outside of the set's shortcut: {shortcut}")]
+    OutsideOfSet { shortcut: PathBuf, path: PathBuf },
+
+    #[error("Have an empty relative path for some reason. Shortcut: {shortcut}; Path: {path}")]
+    NotSure { shortcut: PathBuf, path: PathBuf },
 }
 
 pub(crate) struct FilePath {
@@ -119,7 +145,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct SetShortcut(RelativePathBuf);
 impl SetShortcut {
     pub fn from_path(path: PathBuf) -> Result<Self, SetShortcutError> {
@@ -135,7 +161,6 @@ impl SetShortcut {
     }
 }
 
-// TODO: do a pass on all asrefs and consider deref as well
 impl<T> AsRef<T> for SetShortcut
 where
     T: ?Sized,

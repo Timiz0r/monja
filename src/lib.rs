@@ -41,6 +41,7 @@ pub type RepoStateInitializationError = repo::StateInitializationError;
 #[serde(rename_all = "kebab-case")]
 pub struct MonjaProfileConfig {
     pub repo_dir: PathBuf,
+    // while a hashset would be handy, we use a vec because order is important
     pub target_sets: Vec<SetName>,
 
     // TODO: probably remove
@@ -160,7 +161,7 @@ where
 // it would also be nice for it to support paths rooted under local_root (regardless of cwd), which is what local::FilePath is.
 // however, it would be hard to disambiguate. instead, commands can provide a switch that causes
 // LocalFilePath::from to be invoked with cwd=local_root.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct LocalFilePath(PathBuf);
 
 #[derive(Error, Debug)]
