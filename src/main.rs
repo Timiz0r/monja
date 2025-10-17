@@ -590,7 +590,14 @@ fn main() -> anyhow::Result<()> {
 
     let profile = monja::MonjaProfile::from_config(profile_config, local_root, data_root)?;
 
-    cli.command.execute(profile, cli.opts)
+    let dryrun = cli.opts.dry_run;
+    cli.command.execute(profile, cli.opts)?;
+
+    if dryrun {
+        println!("Note that, due to being a dry-run, no changes were actually made.");
+    }
+
+    Ok(())
 }
 
 // commands that take local paths have a nocwd arg in order to be more easily used with fzf, etc

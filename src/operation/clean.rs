@@ -12,12 +12,18 @@ use crate::{
 pub enum CleanError {
     #[error("Unable to initialize local state.")]
     LocalStateInitialization(#[from] local::StateInitializationError),
+
     #[error("Unable to initialize repo state.")]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
+
     #[error("Failed to remove file.")]
     RemoveFile(#[source] std::io::Error),
+
     #[error("Unable to load an index file.")]
     FileIndex(#[from] FileIndexError),
+
+    #[error("Clean cancelled by user.")]
+    UserCancellation,
 }
 
 #[derive(Debug)]
@@ -47,6 +53,11 @@ fn index_clean(
 ) -> Result<CleanSuccess, CleanError> {
     let files_to_clean = local::old_files_since_last_pull(profile)?;
 
+    let confirmation = confirm(opts, &files_to_clean);
+    if !confirmation {
+        return Err(CleanError::UserCancellation);
+    }
+
     if !opts.dry_run {
         for file in files_to_clean.iter() {
             let path = file.as_ref().to_path(&profile.local_root);
@@ -69,11 +80,18 @@ fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSu
             + local_state.untracked_files.len(),
     );
 
-    let files_to_clean = local_state
+    let files_to_clean: Vec<local::FilePath> = local_state
         .untracked_files
         .into_iter()
         .chain(local_state.files_with_missing_sets.into_values().flatten())
-        .chain(local_state.missing_files.into_values().flatten());
+        .chain(local_state.missing_files.into_values().flatten())
+        .collect();
+
+    let confirmation = confirm(opts, &files_to_clean);
+    if !confirmation {
+        return Err(CleanError::UserCancellation);
+    }
+
     for file in files_to_clean {
         let path = file.as_ref().to_path(&profile.local_root);
 
@@ -87,4 +105,13 @@ fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSu
     // deref coercion to Path
     files_cleaned.sort();
     Ok(CleanSuccess { files_cleaned })
+}
+
+fn confirm(opts: &ExecutionOptions, files_to_clean: &[local::FilePath]) -> bool {
+    let mut message = String::from("These files will be removed locally:\n");
+    for file in files_to_clean {
+        message.push_str(&format!("\t{}", file));
+    }
+
+    opts.user_confirm(&message)
 }

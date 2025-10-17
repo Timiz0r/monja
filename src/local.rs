@@ -127,6 +127,12 @@ impl TryFrom<PathBuf> for FilePath {
     }
 }
 
+impl std::fmt::Display for FilePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum StateInitializationError {
     #[error("Unable to read monja-index.toml.")]

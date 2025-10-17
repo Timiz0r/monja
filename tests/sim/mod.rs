@@ -64,6 +64,7 @@ impl Simulator {
             opts: ExecutionOptions {
                 verbosity: 0,
                 dry_run: false,
+                skip_confirmations: true,
             },
         }
     }

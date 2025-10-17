@@ -4,6 +4,7 @@
 use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
+    io::{Read, Write},
     ops::Deref,
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -123,6 +124,30 @@ pub struct ExecutionOptions {
     /// No disk operations will be performed.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Skip confirmations
+    #[arg(long = "yes", short = 'y')]
+    pub skip_confirmations: bool,
+}
+
+impl ExecutionOptions {
+    pub fn user_confirm(&self, message: &str) -> bool {
+        if self.skip_confirmations {
+            return true;
+        }
+
+        println!("{}", message);
+        print!("Would you like to continue? [yN] ");
+        let _ = std::io::stdout().flush();
+
+        let mut answer = [0u8; 1];
+        std::io::stdin()
+            .lock()
+            .read_exact(&mut answer)
+            .expect("Unable to read user input for confirmation.");
+
+        matches!(answer[0], b'y' | b'Y')
+    }
 }
 
 #[derive(Debug)]
