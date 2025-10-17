@@ -18,15 +18,15 @@ Additionally, it's up to the user to figure out the best way to handle complicat
 
 ### Glossary
 
-| Term       | Description                                                                                                                                  |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repo       | We *pull* configs from here to *local*. This is typically also a git repo.                                                                   |
-| Sets       | Directory that exists in the root of the *repo*. They contain the files that can be *pulled* to *local*.                                     |
-| Set config | A `.monja-set.toml` file found in the root of each *set's* directory.                                                                        |
-| Local      | Typically `~/`. We *push* files from here to the *repo*.                                                                                     |
-| Profile    | Defined by a file in `~/.config/monja/monja-profile.toml` called `monja-profile.toml`. Mainly defines which *sets* are used from the *repo*. |
-| Push       | The operation that puts files that have been updated back into the *repo*.                                                                   |
-| Pull       | The operation that copies files from the *repo* to local.                                                                                    |
+| Term       | Description                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| Repo       | We *pull* configs from here to *local*. This is typically also a git repo.                                       |
+| Sets       | Directory that exists in the root of the *repo*. They contain the files that can be *pulled* to *local*.         |
+| Set config | A `.monja-set.toml` file found in the root of each *set's* directory.                                            |
+| Local      | Typically `~/`. We *push* files from here to the *repo*.                                                         |
+| Profile    | Defined by a file in `~/.config/monja/monja-profile.toml`. Mainly defines which *sets* are used from the *repo*. |
+| Push       | The operation that puts files that have been updated back into the *repo*.                                       |
+| Pull       | The operation that copies files from the *repo* to local.                                                        |
 
 ## New features and functionality
 Be sure to open an issue or find an existing one to discuss beforehand,
@@ -47,6 +47,9 @@ Of course, keep in mind that creating an issue may be adviseable for large-scope
   * Not too important. Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
 * Diff/merge between local and sets
   * QoL
+* Storing profiles in repo
+  * `monja-profile.toml` files can be put in the root of the repo, without repo-dir specified,
+    and they can be referenced from the usual `monja-dir.toml` in `$HOME/.config/monja`
 
 The thoughts on these should eventually make it to an issue somewhere.
 

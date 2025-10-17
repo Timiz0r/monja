@@ -1,0 +1,108 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+    
+        {
+            "name": "Debug unit tests in library 'monja'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test"
+                ]
+            }
+        },
+        {
+            "name": "Debug executable 'monja'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=monja",
+                ]
+            },
+            "args": ["init"]
+        },
+        {
+            "name": "Debug unit tests in executable 'monja'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=monja"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'clean'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=clean"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'init'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=init"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'pull'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=pull"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'push'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=push"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'put'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=put"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'status'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=status"
+                ]
+            }
+        }
+    ]
+}

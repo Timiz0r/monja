@@ -112,9 +112,11 @@ impl MonjaProfile {
 #[derive(Args)]
 #[group(multiple = true)]
 pub struct ExecutionOptions {
+    /// Enables more verbose logging.
     #[arg(short, long = "verbose", action = clap::ArgAction::Count)]
     pub verbosity: u8,
 
+    /// No disk operations will be performed.
     #[arg(long)]
     pub dry_run: bool,
 }

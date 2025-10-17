@@ -9,6 +9,7 @@ use monja::{
     AbsolutePath, CleanMode, ExecutionOptions, InitSpec, LocalFilePath, MonjaProfile, SetName,
 };
 
+use anyhow::anyhow;
 use clap::{Args, Parser, Subcommand, command};
 
 #[derive(Parser)]
@@ -24,15 +25,70 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initializes a profile with some initial settings.
+    ///
+    /// A profile is created that uses a set named after the current hostname.
+    /// The set also contains a sample `.monja-set.toml`.
+    /// A `.monjaignore`` file is created in `$HOME` with some common defaults.
     Init(InitCommand),
+
+    /// Copies local files to the monja repo.
+    ///
+    /// This command uses information from the prior `monja pull` to copy files into the right sets in the repo.
+    /// It's important to note that this command may fail if files are removed from the repo that were previously pulled.
+    /// As such, it is recommended to `monja push` before doing such operations (like a `git pull`) to the repo.
+    ///
+    /// It will not copy files that have not been pulled.
+    /// To copy such files to the repo, use `monja put`.
+    ///
+    /// To keep files from being pushed, make sure they are covered by a `.monjaignore` file.
     Push(PushCommand),
+
+    /// Copies files from the monja repo locally.
+    ///
+    /// The profile contains a list of sets to use, which are the folders in the root directory of the repo.
+    /// These folders are evaluated in order. If a file is found in multiple targeted sets,
+    /// then the latest set's file will be used.
     Pull(PullCommand),
+
+    /// Removes local files that aren't handled by monja.
+    ///
+    /// In the default mode, the sets of files pulled in the previous two `monja pull`s are compared.
+    /// Any file that was pulled in the older pull, but no longer pulled in the newer pull, gets removed.
+    ///
+    /// In the full mode, the current state of the repo is compared to the current state of local
+    /// to determine which files should be removed locally.
+    ///
+    /// To prevent files from being cleaned, make sure they are covered by a `.monjaignore` file.
     Clean(CleanCommand),
+
+    /// Puts local files into a set in the repo.
+    ///
+    /// Unlike `monja push`, this works even if the file hasn't been pulled from the repo before.
+    /// This is most commonly used to put files in the repo for the first time,
+    /// or to recover from cases where `monja push` is failing.
+    ///
+    /// Note that this command ignores `.monjaignore` files.
     Put(PutCommand),
-    ChangeProfile(ChangeProfileCommand),
+
+    /// Prints detailed local status information.
+    ///
+    /// This command prints a few kinds of useful information, which can be filtered by additional args.
+    /// If no filter is provided, everything will be shown.
+    #[command(id = "status")]
     LocalStatus(StatusCommand),
+
+    /// Prints the repo's directory so that it can be piped into `cd`.
     RepoDir(RepoDirCommand),
 }
+/*
+
+    pub files_to_push: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub untracked_files: Vec<LocalFilePath>,
+    pub old_files_after_last_pull: Vec<LocalFilePath>,
+} */
 
 // TODO: macro?
 impl Commands {
@@ -45,7 +101,6 @@ impl Commands {
             Commands::Pull(command) => command.execute(profile, opts),
             Commands::Clean(command) => command.execute(profile, opts),
             Commands::Put(command) => command.execute(profile, opts),
-            Commands::ChangeProfile(command) => command.execute(profile, opts),
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
         }
@@ -249,8 +304,10 @@ impl PullCommand {
 
 #[derive(Args)]
 struct CleanCommand {
-    // if false, will use index diff from last pull
-    #[arg()]
+    /// If set, compares the full state of the repo against the local state,
+    /// cleaning files that are not tracked in the repo.
+    /// If not set, the previous two `monja pull`s are used to determine which files to clean.
+    #[arg(long, short)]
     full: bool,
 }
 impl CleanCommand {
@@ -276,16 +333,25 @@ impl CleanCommand {
 
 #[derive(Args)]
 struct PutCommand {
-    #[arg(long)]
+    /// The set into which the files will be copied
+    #[arg(long, id = "set")]
     owning_set: String,
 
+    /// If set, the paths provided will be relative to the local root, ignoring cwd.
+    ///
+    /// This is typically used when using external tools like `fzf` to select files.
     #[arg(long)]
     nocwd: bool,
 
-    #[arg()]
+    /// If set, the local file index will be updated.
+    ///
+    /// This is typically used to fix issues that arise from `monja push` when files are missing
+    /// from their expected locations in the repo (as determined by the last `monja pull`).
+    #[arg(long)]
     update_index: bool,
 
     // TODO: also allow stdin
+    /// The local files to copy. These will be combined with any newline-delimited files provided through stdin.
     files: Vec<PathBuf>,
 }
 
@@ -346,9 +412,13 @@ impl PutCommand {
 
 #[derive(Args)]
 struct StatusCommand {
+    /// If set, the `location` argument provided will be relative to the local root, ignoring cwd.
+    ///
+    /// This is typically used when using external tools like `fzf` to select files.
     #[arg(long)]
     nocwd: bool,
 
+    /// The local location for which to view status.
     location: Option<PathBuf>,
 
     #[command(flatten)]
@@ -358,12 +428,19 @@ struct StatusCommand {
 #[derive(Args)]
 #[group(required = false, multiple = true)]
 struct StatusFilter {
+    /// Filter to files that are untracked by monja -- meaning they are not in any set targeted in the profile.
     #[arg(long)]
     untracked: bool,
+
+    /// Filter to files, previously pulled, whose set at the time of the pull is currently missing.
     #[arg(long)]
     sets_missing: bool,
+
+    /// Filter to files, previously pulled, that are no longer in the set they were previously pulled from.
     #[arg(long)]
     files_missing: bool,
+
+    /// Filter to files that would be pushed (if no error condition).
     #[arg(long)]
     to_push: bool,
 }
@@ -437,14 +514,6 @@ impl RepoDirCommand {
         println!("{}", profile.repo_root.display());
 
         Ok(())
-    }
-}
-
-#[derive(Args)]
-struct ChangeProfileCommand {}
-impl ChangeProfileCommand {
-    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
-        todo!()
     }
 }
 

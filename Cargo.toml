@@ -2,6 +2,7 @@
 name = "monja"
 version = "0.1.0"
 edition = "2024"
+description = "A very simple to use and easy to reason about multi-machine dotfiles manager."
 
 [dependencies]
 # cli-only. so don't use these in monja.

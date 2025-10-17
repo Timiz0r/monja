@@ -410,3 +410,36 @@ fn files_in_later_sets() -> Result<()> {
 
     Ok(())
 }
+
+#[gtest]
+fn ignores_ignore_file() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    });
+
+    fs_operation! { SetManipulation, sim, "set1",
+    };
+
+    fs_operation! { LocalManipulation, sim,
+        file "notinrepo" "notinrepo"
+    };
+
+    sim.configure_ignorefile("notinrepo");
+
+    let put_result = monja::put(
+        &sim.profile()?,
+        sim.execution_options(),
+        vec![sim.local_path("notinrepo".as_ref())],
+        SetName("set1".into()),
+        false,
+    )?;
+    expect_that!(put_result.files, len(eq(1)));
+
+    fs_operation! { SetValidation, sim, "set1",
+        file "notinrepo" "notinrepo"
+    };
+
+    Ok(())
+}
