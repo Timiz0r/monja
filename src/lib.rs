@@ -4,11 +4,8 @@
 use std::{
     collections::{HashMap, HashSet},
     ffi::{OsStr, OsString},
-    io::Write,
     ops::Deref,
-    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     sync::LazyLock,
 };
 
@@ -19,6 +16,7 @@ use thiserror::Error;
 
 pub(crate) mod local;
 pub(crate) mod repo;
+pub(crate) mod rsync;
 pub mod operation {
     pub mod clean;
     pub mod init;
@@ -53,12 +51,18 @@ pub struct MonjaProfileConfig {
 pub enum MonjaProfileConfigError {
     #[error("Unable to deserialize monja-profile.toml.")]
     Deserialization(#[from] toml::de::Error),
+
     #[error("Unable to serialize monja-profile.toml.")]
     Serialization(#[from] toml::ser::Error),
+
     #[error("Unable to read from monja-profile.toml.")]
-    Read(#[source] std::io::Error),
+    Load(#[source] AbsolutePathError),
+
     #[error("Unable to write to monja-profile.toml.")]
     Write(#[source] std::io::Error),
+
+    #[error("Unable to read to monja-profile.toml.")]
+    Read(#[source] std::io::Error),
 }
 
 impl MonjaProfileConfig {
@@ -91,7 +95,7 @@ impl MonjaProfile {
         config: MonjaProfileConfig,
         local_root: AbsolutePath,
         data_root: AbsolutePath,
-    ) -> Result<MonjaProfile, std::io::Error> {
+    ) -> Result<MonjaProfile, AbsolutePathError> {
         let repo_root = match config.repo_dir.is_relative() {
             true => AbsolutePath::for_existing_path(&local_root.join(&config.repo_dir))?,
             false => AbsolutePath::for_existing_path(&config.repo_dir)?,
@@ -126,9 +130,17 @@ pub struct AbsolutePath {
     path: PathBuf,
 }
 
+#[derive(Error, Debug)]
+pub enum AbsolutePathError {
+    #[error("Unable to canonicalize the path.")]
+    Canonicalize(PathBuf, #[source] std::io::Error),
+}
+
 impl AbsolutePath {
-    pub fn for_existing_path(path: &Path) -> Result<AbsolutePath, std::io::Error> {
-        std::fs::canonicalize(path).map(|path| AbsolutePath { path })
+    pub fn for_existing_path(path: &Path) -> Result<AbsolutePath, AbsolutePathError> {
+        std::fs::canonicalize(path)
+            .map(|path| AbsolutePath { path })
+            .map_err(|e| AbsolutePathError::Canonicalize(path.to_path_buf(), e))
     }
 
     // could implement Into, but won't implement From because this is fallible and meant to use for_existing_path
@@ -157,13 +169,19 @@ where
     }
 }
 
+impl std::fmt::Display for AbsolutePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path.display())
+    }
+}
+
 // the original types use private dependency RelativePathBuf, so we add these types to get around it.
 // furthermore, LocalFilePath in particular represents the translation of various kinds of paths to a valid local::FilePath.
 // supports absolute paths that fall under local_root and relative paths that are children of local_root.
 // it would also be nice for it to support paths rooted under local_root (regardless of cwd), which is what local::FilePath is.
 // however, it would be hard to disambiguate. instead, commands can provide a switch that causes
 // LocalFilePath::from to be invoked with cwd=local_root.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LocalFilePath(PathBuf);
 
 #[derive(Error, Debug)]
@@ -265,6 +283,12 @@ impl PartialEq<Path> for LocalFilePath {
     }
 }
 
+impl std::fmt::Display for LocalFilePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.display())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct RepoFilePath {
     pub path_in_set: PathBuf,
@@ -307,60 +331,6 @@ static MONJA_SPECIAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
 pub fn is_monja_special_file(path: &Path) -> bool {
     path.file_name()
         .is_some_and(|f: &OsStr| MONJA_SPECIAL_FILES.contains(f))
-}
-
-// keeping as io result because basically everything is io result
-pub(crate) fn rsync(
-    source: &Path,
-    dest: &Path,
-    files: impl Iterator<Item = PathBuf>,
-    opts: &ExecutionOptions,
-) -> std::io::Result<()> {
-    // we use checksum mainly because, in integration tests, some files have same size and modified time
-    // this could hypothetically happen in practice, so checksum is perhaps good.
-    // note that file sizes still get compared before checksum, so most cases will still be fast.
-    let mut args: Vec<&OsStr> = vec![
-        "-a".as_ref(),
-        "--files-from=-".as_ref(),
-        "--checksum".as_ref(),
-        "--mkpath".as_ref(),
-    ];
-    if opts.verbosity > 0 {
-        args.push("-v".as_ref());
-    }
-    args.push(source.as_os_str());
-    // append a /
-    // works with mkpath to ensure the dir is properly created if needed
-    let dest = dest.join("").into_os_string();
-    args.push(&dest);
-
-    let mut child = Command::new("rsync")
-        .args(args)
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-
-    {
-        let mut stdin = child.stdin.take().expect("Added above");
-        for file in files {
-            // avoiding the fallible conversion to string
-            stdin.write_all(file.as_os_str().as_bytes())?;
-            stdin.write_all(b"\n")?;
-        }
-        // dropping sends eof
-    }
-
-    let status = child.wait_with_output()?;
-    if opts.verbosity > 0 {
-        println!("Finished rsync with status {}", status.status);
-        // TODO: would be nice to return this instead?
-        std::io::stderr().write_all(&status.stderr)?;
-    }
-
-    match status.status.success() {
-        true => Ok(()),
-        false => Err(std::io::Error::other("Unsuccessful status code for rsync.")),
-    }
 }
 
 // want to keep local/repo::File internal, so gonna bite the bullet on allocating another vector.

@@ -50,6 +50,8 @@ Of course, keep in mind that creating an issue may be adviseable for large-scope
 * Storing profiles in repo
   * `monja-profile.toml` files can be put in the root of the repo, without repo-dir specified,
     and they can be referenced from the usual `monja-dir.toml` in `$HOME/.config/monja`
+* Custom `--interactive`
+  * Currently has a hard dependency on `fzf`.
 
 The thoughts on these should eventually make it to an issue somewhere.
 
@@ -140,3 +142,8 @@ Additionally, prefer putting them at the bottom of the function, even if it mean
 If helper functions are quite small, they can instead go at the bottom of the block they're in.
 
 If a lot of data needs to be captured, using a lambda is also viable, keeping in mind the other alternatives.
+
+### Results and errors
+Do not return results whose errors contain no helpful information.
+For example, this means not returning an `Err(std::io::Error)`,
+which, while describing the error, completely lacks context (such as a path).

@@ -110,7 +110,7 @@ impl Simulator {
             local_root,
             data_root,
         )
-        .map_err(MonjaProfileConfigError::Read)
+        .map_err(MonjaProfileConfigError::Load)
     }
 
     pub(crate) fn execution_options(&self) -> &ExecutionOptions {

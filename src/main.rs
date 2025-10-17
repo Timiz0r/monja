@@ -1,8 +1,11 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
 use std::{
+    collections::HashSet,
     fs,
+    io::{BufRead, IsTerminal, Write},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
 };
 
 use monja::{
@@ -81,14 +84,6 @@ enum Commands {
     /// Prints the repo's directory so that it can be piped into `cd`.
     RepoDir(RepoDirCommand),
 }
-/*
-
-    pub files_to_push: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-    pub files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-    pub missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-    pub untracked_files: Vec<LocalFilePath>,
-    pub old_files_after_last_pull: Vec<LocalFilePath>,
-} */
 
 // TODO: macro?
 impl Commands {
@@ -147,7 +142,7 @@ impl InitCommand {
                     "Profile can be found at '{}'.",
                     result.profile_config_path.display()
                 );
-                println!("Repo can be found in '{}'.", profile.repo_root.display());
+                println!("Repo can be found in '{}'.", profile.repo_root);
                 println!(
                     "Set '{}' automatically created.",
                     profile.config.target_sets[0]
@@ -182,7 +177,7 @@ impl PushCommand {
                 for (set_name, file_paths) in files_with_missing_sets {
                     eprintln!("\tSet: {}", set_name);
                     for path in file_paths {
-                        eprintln!("\t\t{:?}", path);
+                        eprintln!("\t\t{}", path);
                     }
                 }
             }
@@ -195,7 +190,7 @@ impl PushCommand {
                 for (set_name, file_paths) in missing_files {
                     eprintln!("\tSet: {}", set_name);
                     for path in file_paths {
-                        eprintln!("\t\t{:?}", path);
+                        eprintln!("\t\t{}", path);
                     }
                 }
             }
@@ -243,7 +238,7 @@ impl PushCommand {
             for (set_name, file_paths) in result.files_pushed.iter() {
                 eprintln!("\tSet: {}", set_name);
                 for path in file_paths {
-                    eprintln!("\t\t{:?}", path);
+                    eprintln!("\t\t{}", path);
                 }
             }
         } else {
@@ -279,7 +274,11 @@ impl PullCommand {
             for (set_name, file_paths) in result.files_pulled.into_iter() {
                 println!("\tSet: {}", set_name);
                 for path in file_paths {
-                    println!("\t\t'{:?}' -> '{:?}'", path.path_in_set, path.local_path);
+                    println!(
+                        "\t\t'{}' -> '{}'",
+                        path.path_in_set.display(),
+                        path.local_path.display()
+                    );
                 }
             }
         } else {
@@ -294,7 +293,7 @@ impl PullCommand {
             );
 
             for file_path in result.cleanable_files.into_iter() {
-                println!("\t{:?}", file_path);
+                println!("\t{}", file_path);
             }
         }
 
@@ -321,7 +320,7 @@ impl CleanCommand {
         if !clean_result.files_cleaned.is_empty() {
             println!("Local files cleaned:");
             for path in clean_result.files_cleaned.into_iter() {
-                println!("{:?}", path);
+                println!("{}", path);
             }
         } else {
             println!("No local files cleaned.")
@@ -334,31 +333,52 @@ impl CleanCommand {
 #[derive(Args)]
 struct PutCommand {
     /// The set into which the files will be copied
-    #[arg(long, id = "set")]
+    #[arg(long = "set")]
     owning_set: String,
 
     /// If set, the paths provided will be relative to the local root, ignoring cwd.
     ///
     /// This is typically used when using external tools like `fzf` to select files.
-    #[arg(long)]
-    nocwd: bool,
+    #[arg(long = "nocwd")]
+    no_cwd: bool,
 
     /// If set, the local file index will be updated.
     ///
     /// This is typically used to fix issues that arise from `monja push` when files are missing
     /// from their expected locations in the repo (as determined by the last `monja pull`).
-    #[arg(long)]
+    #[arg(long, visible_alias = "idx")]
     update_index: bool,
 
+    /// Uses `fzf` to select local files to copy.
+    #[arg(long, short)]
+    interactive: bool,
+
     // TODO: also allow stdin
-    /// The local files to copy. These will be combined with any newline-delimited files provided through stdin.
+    /// The local files to copy.
+    ///
+    /// These will be combined with any newline-delimited files provided through stdin.
+    /// These will also be combined with files provided via `--interactive`.
+    ///
+    /// A limit of 100 paths may be passed through stdin to prevent accidental mass copying.
+    #[arg(last = true)]
     files: Vec<PathBuf>,
 }
 
 impl PutCommand {
     fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         let cwd = std::env::current_dir()?;
-        let files = to_local_paths(&profile, &self.files, &cwd, self.nocwd)?;
+        let mut files = to_local_paths(&profile, &self.files, &cwd, self.no_cwd)?;
+
+        let mut stdin_files = read_paths_from_stdin(&profile, &cwd)?;
+        files.append(&mut stdin_files);
+
+        if self.interactive {
+            let mut interactive_files = read_paths_interactively(&profile)?;
+            files.append(&mut interactive_files);
+        }
+
+        // there could hypothetically be duplicates between these three sources, or even in a single source
+        // let's just assume the user doesnt. and, for all i know, it'll work just fine.
 
         let result = monja::put(
             &profile,
@@ -373,7 +393,7 @@ impl PutCommand {
             result.owning_set
         );
         for file in result.files.into_iter() {
-            println!("\t{:?}", file);
+            println!("\t{}", file);
         }
 
         if !result.set_is_targeted {
@@ -389,7 +409,7 @@ impl PutCommand {
                 result.owning_set
             );
             for (path, set_names) in result.files_in_later_sets.into_iter() {
-                println!("\t{:?}", path);
+                println!("\t{}", path);
                 for set_name in set_names.into_iter() {
                     println!("\t\t{}", set_name);
                 }
@@ -402,7 +422,7 @@ impl PutCommand {
                 result.owning_set
             );
             for file in result.untracked_files.into_iter() {
-                println!("\t{:?}", file);
+                println!("\t{}", file);
             }
         }
 
@@ -415,8 +435,8 @@ struct StatusCommand {
     /// If set, the `location` argument provided will be relative to the local root, ignoring cwd.
     ///
     /// This is typically used when using external tools like `fzf` to select files.
-    #[arg(long)]
-    nocwd: bool,
+    #[arg(long = "nocwd")]
+    no_cwd: bool,
 
     /// The local location for which to view status.
     location: Option<PathBuf>,
@@ -443,20 +463,26 @@ struct StatusFilter {
     /// Filter to files that would be pushed (if no error condition).
     #[arg(long)]
     to_push: bool,
+
+    /// Filter to files that would be pushed (if no error condition).
+    #[arg(long)]
+    old_files: bool,
 }
 impl StatusCommand {
     fn execute(&self, profile: MonjaProfile, _: ExecutionOptions) -> anyhow::Result<()> {
         let cwd = std::env::current_dir()?;
         let location = to_local_path(
             &profile,
-            self.location.as_deref().unwrap_or(".".as_ref()),
+            self.location.as_deref().unwrap_or("".as_ref()),
             &cwd,
-            self.nocwd,
+            self.no_cwd,
         )?;
-        let status = monja::local_status(&profile, location)?;
+        print!(
+            "Status of local files under {}\n\n",
+            profile.local_root.join(&location).display()
+        );
 
-        // TODO: revisit passing this to local_status
-        // will probably pass cwd-rooted files for put command
+        let status = monja::local_status(&profile, location)?;
 
         if self.filter.as_ref().is_none_or(|f| f.sets_missing) {
             print(
@@ -474,16 +500,24 @@ impl StatusCommand {
 
         if self.filter.as_ref().is_none_or(|f| f.untracked) {
             println!("Untracked files:");
-            for path in status.untracked_files.into_iter() {
-                println!("{:?}", path);
+
+            if !status.untracked_files.is_empty() {
+                for path in status.untracked_files.into_iter() {
+                    println!("{}", path);
+                }
             }
+            println!();
         }
 
-        if self.filter.as_ref().is_none_or(|f| f.untracked) {
+        if self.filter.as_ref().is_none_or(|f| f.old_files) {
             println!("Files removed from repo since last pull (also found in untracked):");
-            for path in status.old_files_after_last_pull.into_iter() {
-                println!("{:?}", path);
+
+            if !status.old_files_after_last_pull.is_empty() {
+                for path in status.old_files_after_last_pull.into_iter() {
+                    println!("{}", path);
+                }
             }
+            println!();
         }
 
         if self.filter.as_ref().is_none_or(|f| f.to_push) {
@@ -497,12 +531,16 @@ impl StatusCommand {
 
         fn print(message: &str, info: Vec<(SetName, Vec<LocalFilePath>)>) {
             println!("{}", message);
-            for (set_name, file_paths) in info {
-                println!("\tSet: {}", set_name);
-                for path in file_paths {
-                    println!("\t\t{:?}", path);
+
+            if !info.is_empty() {
+                for (set_name, file_paths) in info {
+                    println!("\tSet: {}", set_name);
+                    for path in file_paths {
+                        println!("\t\t{}", path);
+                    }
                 }
             }
+            println!()
         }
     }
 }
@@ -511,7 +549,7 @@ impl StatusCommand {
 struct RepoDirCommand {}
 impl RepoDirCommand {
     fn execute(&self, profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
-        println!("{}", profile.repo_root.display());
+        println!("{}", profile.repo_root);
 
         Ok(())
     }
@@ -531,7 +569,7 @@ fn main() -> anyhow::Result<()> {
     let data_root = base
         .get_data_home()
         .expect("We got bigger problems if there's no home.");
-    fs::create_dir(&data_root)?;
+    fs::create_dir_all(&data_root)?;
     let data_root = AbsolutePath::for_existing_path(&data_root)?;
 
     // is a special case, since profile may not exist yet, etc.
@@ -586,4 +624,111 @@ fn to_local_paths(
         .map(|f| LocalFilePath::from(profile, f.as_ref(), cwd))
         .collect();
     Ok(files?)
+}
+
+fn read_paths_from_stdin(profile: &MonjaProfile, cwd: &Path) -> anyhow::Result<Vec<LocalFilePath>> {
+    let stdin = std::io::stdin().lock();
+    if stdin.is_terminal() {
+        return Ok(Vec::new());
+    }
+
+    let mut ctr = 0;
+    let paths: anyhow::Result<Vec<LocalFilePath>> = stdin
+        .lines()
+        .take_while(move |_| {
+            ctr += 1;
+            ctr < 100
+        })
+        .map(|s| {
+            s.map_err(anyhow::Error::new).and_then(|s| {
+                LocalFilePath::from(profile, s.as_ref(), cwd).map_err(anyhow::Error::new)
+            })
+        })
+        .collect();
+    if ctr >= 100 {
+        // somewhat arbitrary, but better than mass copying, presumably
+        Err(anyhow!(
+            "There is a limit of 100 paths passed through stdin."
+        ))
+    } else {
+        paths
+    }
+}
+
+// arguably, this should be moved into operations. will decide later.
+// as-is, this happens before any other validation, such as making sure a set exists
+fn read_paths_interactively(profile: &MonjaProfile) -> anyhow::Result<Vec<LocalFilePath>> {
+    let status = monja::local_status(
+        profile,
+        LocalFilePath::from(profile, &profile.local_root, &profile.local_root)?,
+    )?;
+
+    // since files_to_push means the (targeted) set already has the file, we don't need to include them.
+    // additionally, old_files_after_last_pull is a special category that can contain duplicates of the other categories
+    //
+    // could calculate capacity if necessary, but it's probably fine
+    // we use a hashset for deduplication, since a file can be in multiple sets
+    let mut files = HashSet::new();
+    files.extend(
+        status
+            .files_with_missing_sets
+            .into_iter()
+            .flat_map(|(_, files)| files),
+    );
+    files.extend(
+        status
+            .missing_files
+            .into_iter()
+            .flat_map(|(_, files)| files),
+    );
+    files.extend(status.untracked_files);
+
+    let mut sorted_files = Vec::with_capacity(files.len());
+    sorted_files.extend(files);
+    sorted_files.sort();
+
+    let mut child = Command::new("fzf")
+        .args([
+            &format!(
+                "--preview=bat --binary=no-printing --style=default --color=always {}/{{}}",
+                &profile.local_root
+            ),
+            "--multi",
+            "--ansi",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| anyhow!("Failed to take stdin somehow when running fzf"))?;
+    for file in sorted_files.into_iter() {
+        stdin.write_all(file.as_os_str().as_encoded_bytes())?;
+        stdin.write_all(b"\n")?;
+    }
+    std::mem::drop(stdin);
+
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "Failed to run fzf: {:?}\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let files: anyhow::Result<Vec<LocalFilePath>> = output
+        .stdout
+        .lines()
+        .map(|s| {
+            s.map_err(anyhow::Error::new).and_then(|s| {
+                LocalFilePath::from(profile, s.as_ref(), &profile.local_root)
+                    .map_err(anyhow::Error::new)
+            })
+        })
+        .collect();
+
+    files
 }

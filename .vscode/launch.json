@@ -25,7 +25,7 @@
                     "--bin=monja",
                 ]
             },
-            "args": ["init"]
+            "args": []
         },
         {
             "name": "Debug unit tests in executable 'monja'",

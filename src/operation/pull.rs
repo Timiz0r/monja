@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, RepoFilePath, SetName,
-    convert_set_repofile_result, local, repo, rsync,
+    convert_set_repofile_result, local, repo, rsync::rsync,
 };
 
 #[derive(Error, Debug)]

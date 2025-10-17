@@ -85,6 +85,6 @@ fn full_clean(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<CleanSu
     }
 
     // deref coercion to Path
-    files_cleaned.sort_by(|l: &LocalFilePath, r: &LocalFilePath| l.cmp(r));
+    files_cleaned.sort();
     Ok(CleanSuccess { files_cleaned })
 }

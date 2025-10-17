@@ -96,7 +96,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
             .expect("Just made the profile file."),
     )?;
     let profile = MonjaProfile::from_config(profile, spec.local_root, spec.data_root)
-        .map_err(MonjaProfileConfigError::Read)?;
+        .map_err(MonjaProfileConfigError::Load)?;
 
     Ok(InitSuccess {
         profile: Some(profile),

@@ -1,7 +1,8 @@
 use thiserror::Error;
 
 use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile, convert_set_localfile_result, local, repo, rsync,
+    ExecutionOptions, LocalFilePath, MonjaProfile, convert_set_localfile_result, local, repo,
+    rsync::rsync,
 };
 
 #[derive(Error, Debug)]

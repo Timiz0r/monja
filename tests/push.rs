@@ -212,7 +212,7 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
     // versus actually getting to push, we should fail when trying to create a profile
     // which actually kinda means this test could go in pull.rs, as well
     let profile_result = sim.profile();
-    expect_that!(profile_result, err(pat!(MonjaProfileConfigError::Read(..))));
+    expect_that!(profile_result, err(pat!(MonjaProfileConfigError::Load(..))));
 
     Ok(())
 }

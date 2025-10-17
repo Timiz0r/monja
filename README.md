@@ -12,5 +12,14 @@ if config duplication becomes a concern,
 use the right configurations to source/import/include/configure the right parts for the right machine,
 using the typical methods for each tool.
 
+## Dependencies
+* rsync
+  * We use `rsync` because it's an already existing, well-know, quality tool that has great performance and reliability.
+    Why invent our own wheel when the perfect one already exists?
+* fzf
+  * Used for interactively adding files to the monja repo.
+* bat
+  * Used for file previews in `fzf`
+
 ## Usage
 TODO
