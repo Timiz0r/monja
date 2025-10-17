@@ -32,6 +32,7 @@ pub enum InitError {
 pub struct InitSuccess {
     // only returns None on dryrun
     pub profile: Option<MonjaProfile>,
+    pub profile_config_path: PathBuf,
 }
 
 pub struct InitSpec {
@@ -50,7 +51,10 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     }
 
     if opts.dry_run {
-        return Ok(InitSuccess { profile: None });
+        return Ok(InitSuccess {
+            profile: None,
+            profile_config_path: spec.profile_config_path,
+        });
     }
 
     fs::write(
@@ -96,6 +100,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
 
     Ok(InitSuccess {
         profile: Some(profile),
+        profile_config_path: spec.profile_config_path,
     })
 }
 

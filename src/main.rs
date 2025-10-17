@@ -66,7 +66,7 @@ impl InitCommand {
         let repo_root = base.create_data_directory("repo")?;
         let repo_root = AbsolutePath::for_existing_path(&repo_root)?;
         let relative_repo_root = repo_root
-            .strip_prefix(base.get_data_home().expect("Should exist."))
+            .strip_prefix(&local_root)
             .expect("Should naturally be a prefix")
             .to_path_buf();
 
@@ -89,8 +89,8 @@ impl InitCommand {
             Some(profile) => {
                 println!("Initialization successful!");
                 println!(
-                    "Profile can be found in '{}'.",
-                    profile.local_root.display()
+                    "Profile can be found at '{}'.",
+                    result.profile_config_path.display()
                 );
                 println!("Repo can be found in '{}'.", profile.repo_root.display());
                 println!(
@@ -449,6 +449,9 @@ impl ChangeProfileCommand {
 }
 
 fn main() -> anyhow::Result<()> {
+    // goes first so that help and version commands can work before our code
+    let cli = Cli::parse();
+
     let base = xdg::BaseDirectories::with_prefix("monja");
 
     let profile_config_path = base.place_config_file("monja-profile.toml")?;
@@ -459,11 +462,19 @@ fn main() -> anyhow::Result<()> {
     let data_root = base
         .get_data_home()
         .expect("We got bigger problems if there's no home.");
+    fs::create_dir(&data_root)?;
     let data_root = AbsolutePath::for_existing_path(&data_root)?;
 
-    let cli = Cli::parse();
+    // is a special case, since profile may not exist yet, etc.
     if let Commands::Init(init) = cli.command {
         return init.execute(cli.opts, profile_config_path, local_root, data_root, &base);
+    }
+
+    if !profile_config_path.is_file() {
+        return Err(anyhow!(
+            "monja profile does not exist. Run `monja init` to get started, or create the profile here: {}",
+            profile_config_path.display()
+        ));
     }
 
     let profile_config_path = AbsolutePath::for_existing_path(&profile_config_path)?;
