@@ -1,6 +1,9 @@
 // #![deny(exported_private_dependencies)]
 #![deny(clippy::unwrap_used)]
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use monja::{
     AbsolutePath, CleanMode, ExecutionOptions, InitSpec, LocalFilePath, MonjaProfile, SetName,
@@ -67,12 +70,18 @@ impl InitCommand {
             .expect("Should naturally be a prefix")
             .to_path_buf();
 
+        let machine = fs::read_to_string("/proc/sys/kernel/hostname")
+            .expect("If doesn't exist, would prefer panic.")
+            .trim()
+            .to_string();
+
         let spec = InitSpec {
             profile_config_path,
             local_root,
             repo_root,
             data_root,
             relative_repo_root,
+            initial_set_name: machine,
         };
         let result = monja::init(&opts, spec)?;
 

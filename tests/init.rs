@@ -23,6 +23,11 @@ fn files_placed_correctly() -> Result<()> {
 
     expect_that!(sim.repo_root().join("README.md").exists(), is_true());
     expect_that!(sim.local_root().join(".monjaignore").exists(), is_true());
+    expect_that!(sim.repo_root().join("initialset").exists(), is_true());
+    expect_that!(
+        sim.repo_root().join("initialset/.monja-set.toml").exists(),
+        is_true()
+    );
 
     let dirs_in_repo: Vec<PathBuf> = sim
         .repo_root()
@@ -86,6 +91,11 @@ fn dry_run() -> Result<()> {
     let result = init(&sim)?;
     expect_that!(result.profile, none());
     expect_that!(sim.profile_path().exists(), is_false());
+    expect_that!(sim.repo_root().join("initialset").exists(), is_false());
+    expect_that!(
+        sim.repo_root().join("initialset/.monja-set.toml").exists(),
+        is_false()
+    );
 
     Ok(())
 }
@@ -101,6 +111,7 @@ fn init(sim: &Simulator) -> std::result::Result<InitSuccess, InitError> {
             .relative_to(sim.local_root())
             .unwrap()
             .to_path(""),
+        initial_set_name: "initialset".into(),
     };
 
     monja::init(sim.execution_options(), spec)

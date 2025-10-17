@@ -41,6 +41,7 @@ pub struct InitSpec {
     pub repo_root: AbsolutePath,
     pub data_root: AbsolutePath,
     pub relative_repo_root: PathBuf,
+    pub initial_set_name: String,
 }
 
 pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, InitError> {
@@ -52,7 +53,6 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
         return Ok(InitSuccess { profile: None });
     }
 
-    let machine = get_hostname().trim().to_string();
     fs::write(
         &spec.profile_config_path,
         formatdoc! {"
@@ -61,12 +61,21 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
             target-sets = [
                 '{}',
             ]
-        ", spec.relative_repo_root.display(), machine },
+        ", spec.relative_repo_root.display(), &spec.initial_set_name },
     )
     .map_err(InitError::Profile)?;
 
-    let set_path = spec.repo_root.join(machine);
-    fs::create_dir_all(set_path).map_err(InitError::Set)?;
+    let set_path = spec.repo_root.join(spec.initial_set_name);
+    fs::create_dir_all(&set_path).map_err(InitError::Set)?;
+
+    fs::write(
+        set_path.join(".monja-set.toml"),
+        indoc! {"
+            # Use a shortcut to reduce the amount of initial folder nesting!
+            # shortcut = '.config'
+        "},
+    )
+    .map_err(InitError::Profile)?;
 
     let ignorefile = spec.local_root.join(".monjaignore");
     if !ignorefile.exists() {
@@ -133,7 +142,3 @@ const README: &str = indoc! {"
     ]
     ```
 "};
-
-fn get_hostname() -> String {
-    fs::read_to_string("/proc/sys/kernel/hostname").expect("If doesn't exist, would prefer panic.")
-}
