@@ -213,37 +213,9 @@ impl LocalFilePath {
             })?;
         Ok(LocalFilePath(path.to_path("")))
     }
-}
 
-// note that we dont have any From<&Path> implementation because we need to verify the path more
-// hence why we implement our own from function
-
-impl From<local::FilePath> for LocalFilePath {
-    fn from(value: local::FilePath) -> Self {
-        LocalFilePath(value.to_path("".as_ref()))
-    }
-}
-
-impl TryFrom<LocalFilePath> for local::FilePath {
-    type Error = relative_path::FromPathError;
-
-    fn try_from(value: LocalFilePath) -> Result<Self, Self::Error> {
-        value.0.try_into()
-    }
-}
-
-impl TryFrom<&LocalFilePath> for local::FilePath {
-    type Error = relative_path::FromPathError;
-
-    fn try_from(value: &LocalFilePath) -> Result<Self, Self::Error> {
-        let path: &Path = value.0.as_ref();
-        path.try_into()
-    }
-}
-
-impl From<LocalFilePath> for PathBuf {
-    fn from(value: LocalFilePath) -> Self {
-        value.0
+    pub(crate) fn to_internal(&self) -> local::FilePath {
+        local::FilePath::create_from_public(self)
     }
 }
 
@@ -262,6 +234,21 @@ where
 {
     fn as_ref(&self) -> &T {
         self.deref().as_ref()
+    }
+}
+
+// note that we dont have any From<&Path> implementation because we need to verify the path more
+// hence why we implement our own from function
+
+impl From<local::FilePath> for LocalFilePath {
+    fn from(value: local::FilePath) -> Self {
+        LocalFilePath(value.into())
+    }
+}
+
+impl From<LocalFilePath> for PathBuf {
+    fn from(value: LocalFilePath) -> Self {
+        value.0
     }
 }
 

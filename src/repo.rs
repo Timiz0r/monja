@@ -12,7 +12,7 @@ pub(crate) struct RepoState {
 }
 
 pub(crate) struct Set {
-    pub _name: SetName,
+    pub name: SetName,
     pub shortcut: SetShortcut,
     pub root: AbsolutePath,
     // directories: HashMap<ObjectPath, Directory>,
@@ -44,11 +44,11 @@ impl Set {
         match path.components().next() {
             Some(relative_path::Component::ParentDir) => Err(SetPathError::OutsideOfSet {
                 shortcut: self.shortcut.to_path(""),
-                path: local_path.to_path("".as_ref()),
+                path: local_path.clone().into(),
             }),
             None => Err(SetPathError::NotSure {
                 shortcut: self.shortcut.to_path(""),
-                path: local_path.to_path("".as_ref()),
+                path: local_path.clone().into(),
             }),
             _ => Ok(path),
         }
@@ -70,11 +70,8 @@ pub(crate) struct FilePath {
 }
 
 impl FilePath {
-    fn new(shortcut: &RelativePath, path_in_set: RelativePathBuf) -> FilePath {
-        let mut local_path = RelativePathBuf::new();
-        local_path.push(shortcut);
-        local_path.push(&path_in_set);
-        let local_path = local_path.into();
+    fn new(shortcut: &SetShortcut, path_in_set: RelativePathBuf) -> FilePath {
+        let local_path = local::FilePath::for_set(shortcut, &path_in_set);
 
         FilePath {
             path_in_set,
@@ -288,7 +285,7 @@ fn load_set_state(
     }
 
     Ok(Set {
-        _name: set_name.clone(),
+        name: set_name.clone(),
         shortcut,
         root,
         locally_mapped_files,

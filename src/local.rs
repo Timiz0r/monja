@@ -1,9 +1,6 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, path::PathBuf};
 
-use crate::{MonjaProfile, repo};
+use crate::{LocalFilePath, MonjaProfile, repo};
 
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
@@ -80,16 +77,30 @@ pub(crate) fn retrieve_state(
 pub(crate) struct FilePath(RelativePathBuf);
 
 impl FilePath {
-    pub(crate) fn to_path(&self, base: &Path) -> PathBuf {
-        self.0.to_path(base)
+    pub(crate) fn to_absolute_path(&self, profile: &MonjaProfile) -> PathBuf {
+        self.0.to_path(&profile.local_root)
     }
 
     pub(crate) fn is_child_of(&self, base: &Self) -> bool {
         self.0.starts_with(&base.0)
     }
 
-    pub fn current_location() -> Self {
+    pub(crate) fn current_location() -> Self {
         FilePath(RelativePathBuf::new())
+    }
+
+    pub(crate) fn for_set(shortcut: &repo::SetShortcut, path_in_set: &RelativePath) -> FilePath {
+        let mut path = RelativePathBuf::new();
+        path.push(shortcut);
+        path.push(path_in_set);
+
+        FilePath(path)
+    }
+
+    pub(crate) fn create_from_public(path: &LocalFilePath) -> Self {
+        // the only two places LocalFilePath get made are the heavily verified LocalFilePath and from a local::FilePath
+        // so we consider instances of LocalFilePath to be valid and don't need any extra validation
+        FilePath(RelativePathBuf::from_path(path).expect("LocalFilePath expected to be valid"))
     }
 }
 
@@ -99,33 +110,20 @@ impl AsRef<RelativePath> for FilePath {
     }
 }
 
-impl From<FilePath> for std::path::PathBuf {
+impl From<FilePath> for PathBuf {
     fn from(value: FilePath) -> Self {
-        value.0.to_path("") // aka dont specify a base and keep it relative
+        value.0.into_string().into()
     }
 }
 
-// unlike the more public LocalFilePath, we do attempt to allow conversions from Path/PathBuf,
-// under the assumption that we've done it correctly.
+// ideally doesn't exist, but have it for easy deserialization
+// currently also used by `TryFrom<LocalFilePath> for local::FilePath`,
+// but, if not for serialization, we could move this logic there
 impl TryFrom<PathBuf> for FilePath {
     type Error = relative_path::FromPathError;
 
     fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
         Ok(FilePath(RelativePathBuf::from_path(value)?))
-    }
-}
-
-impl TryFrom<&Path> for FilePath {
-    type Error = relative_path::FromPathError;
-
-    fn try_from(value: &Path) -> Result<Self, Self::Error> {
-        Ok(FilePath(RelativePathBuf::from_path(value)?))
-    }
-}
-
-impl From<RelativePathBuf> for FilePath {
-    fn from(value: RelativePathBuf) -> Self {
-        FilePath(value)
     }
 }
 

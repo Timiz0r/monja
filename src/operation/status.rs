@@ -30,10 +30,8 @@ pub fn local_status(
     let repo =
         repo::initialize_full_state(profile).map_err(StatusError::RepoStateInitialization)?;
     let local_state = local::retrieve_state(profile, &repo)?;
-    let location = location
-        .clone() // only cloning in case error. but it's just one clone so cheap enough.
-        .try_into()
-        .map_err(|_| StatusError::Location(location))?;
+    // only cloning in case error. but it's just one clone so cheap enough.
+    let location = location.to_internal();
 
     let files_to_push = convert_set_localfile_result(
         &profile.config.target_sets,

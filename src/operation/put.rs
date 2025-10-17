@@ -35,9 +35,6 @@ pub enum PutError {
     #[error("Failed to create the directory in the set that the local file will be copied to.")]
     CreateDestDir(PathBuf, #[source] std::io::Error),
 
-    #[error("Failed to parse the local file path.")]
-    PathParse(LocalFilePath),
-
     #[error("Either path isn't a file, or the directory could not be extracted from the path.")]
     NotValidFile(PathBuf),
 
@@ -69,51 +66,30 @@ pub fn put(
         false => local::FileIndex::new(),
     };
 
-    let set = repo
-        .sets
-        .get(&owning_set)
-        .ok_or_else(|| PutError::SetNotFound(owning_set.clone()))?;
-
     let owning_set_pos = profile
         .config
         .target_sets
         .iter()
         .position(|s: &SetName| *s == owning_set);
 
-    let mut tracked_files: HashSet<LocalFilePath> = HashSet::new();
-    let mut files_in_later_sets: HashMap<LocalFilePath, Vec<repo::SetName>> = HashMap::new();
+    let owning_set = repo
+        .sets
+        .get(&owning_set)
+        .ok_or_else(|| PutError::SetNotFound(owning_set.clone()))?;
+
+    // will flip it later to calculate untracked files
+    let mut tracked_files = HashSet::new();
+    let mut files_in_later_sets: HashMap<LocalFilePath, Vec<SetName>> = HashMap::new();
     let mut result_files = Vec::with_capacity(files.len());
     for path in files.into_iter() {
-        let internal_path: local::FilePath = match path.clone().try_into() {
-            Ok(path) => path,
-            Err(_) => return Err(PutError::PathParse(path)),
-        };
-
-        let copy_from = internal_path.to_path(&profile.local_root);
-        if !copy_from.is_file() {
-            return Err(PutError::NotValidFile(copy_from.to_path_buf()));
-        }
-        let copy_to = set.get_repo_absolute_path_for(&internal_path)?;
-
-        let copy_to_dir = copy_to
-            .parent()
-            .ok_or_else(|| PutError::NotValidFile(copy_to.to_path_buf()))?;
-        if !opts.dry_run {
-            fs::create_dir_all(copy_to_dir)
-                .map_err(|e| PutError::CreateDestDir(copy_to_dir.to_path_buf(), e))?;
-        }
+        let internal_path: local::FilePath = path.to_internal();
 
         if !opts.dry_run {
-            fs::copy(&copy_from, &copy_to).map_err(|e| PutError::CopyToSet {
-                set_name: owning_set.clone(),
-                local_path: copy_from,
-                repo_path: copy_to,
-                source: e,
-            })?;
+            copy_to_set(profile, owning_set, &internal_path)?;
         }
 
         for (set_name, set) in repo.sets.iter() {
-            let is_dest_set = owning_set_pos.is_some() && owning_set == *set_name;
+            let is_dest_set = owning_set_pos.is_some() && owning_set.name == *set_name;
             // the sets here don't reflect the fact that we're pushing files to
             if !is_dest_set && !set.tracks_file(&internal_path) {
                 continue;
@@ -148,7 +124,7 @@ pub fn put(
         // updating the index allows the put command to fix issues that happen
         // when the repo is changed in a way that removes files, followed by an attempted push
         if update_index {
-            index.set(internal_path, owning_set.clone());
+            index.set(internal_path, owning_set.name.clone());
         }
     }
 
@@ -162,7 +138,7 @@ pub fn put(
         .cloned()
         .collect();
     Ok(PutSuccess {
-        owning_set: owning_set.clone(),
+        owning_set: owning_set.name.clone(),
         files: result_files,
         set_is_targeted: owning_set_pos.is_some(),
         files_in_later_sets: files_in_later_sets
@@ -171,4 +147,31 @@ pub fn put(
             .collect(),
         untracked_files,
     })
+}
+
+fn copy_to_set(
+    profile: &MonjaProfile,
+    set: &repo::Set,
+    path: &local::FilePath,
+) -> Result<(), PutError> {
+    let copy_from = path.to_absolute_path(profile);
+    if !copy_from.is_file() {
+        return Err(PutError::NotValidFile(copy_from));
+    }
+    let copy_to = set.get_repo_absolute_path_for(path)?;
+    let copy_to_dir = copy_to
+        .parent()
+        .ok_or_else(|| PutError::NotValidFile(copy_to.to_path_buf()))?;
+
+    fs::create_dir_all(copy_to_dir)
+        .map_err(|e| PutError::CreateDestDir(copy_to_dir.to_path_buf(), e))?;
+
+    fs::copy(&copy_from, &copy_to).map_err(|e| PutError::CopyToSet {
+        set_name: set.name.clone(),
+        local_path: copy_from,
+        repo_path: copy_to,
+        source: e,
+    })?;
+
+    Ok(())
 }
