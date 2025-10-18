@@ -84,8 +84,13 @@ impl Simulator {
         &self.profile_path
     }
 
-    pub(crate) fn local_path(&self, path: &Path) -> LocalFilePath {
-        LocalFilePath::from(&self.profile().unwrap(), path, self.local_root.path()).unwrap()
+    pub(crate) fn local_path(&self, path: &str) -> LocalFilePath {
+        LocalFilePath::from(
+            &self.profile().unwrap(),
+            path.as_ref(),
+            self.local_root.path(),
+        )
+        .unwrap()
     }
 
     pub(crate) fn cwd(&self) -> LocalFilePath {

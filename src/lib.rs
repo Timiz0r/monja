@@ -21,6 +21,7 @@ pub(crate) mod rsync;
 pub mod operation {
     pub mod clean;
     pub mod init;
+    pub mod new_set;
     pub mod pull;
     pub mod push;
     pub mod put;
@@ -28,9 +29,9 @@ pub mod operation {
 }
 
 pub use crate::{
-    operation::clean::*, operation::init::*, operation::pull::*, operation::push::*,
-    operation::put::*, operation::status::*, repo::SetConfig, repo::SetConfigError, repo::SetName,
-    repo::SetShortcutError,
+    operation::clean::*, operation::init::*, operation::new_set::*, operation::pull::*,
+    operation::push::*, operation::put::*, operation::status::*, repo::SetConfig,
+    repo::SetConfigError, repo::SetCreationError, repo::SetName, repo::SetShortcutError,
 };
 
 pub type LocalStateInitializationError = local::StateInitializationError;

@@ -33,7 +33,7 @@ fn fix_missing_set() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("blueberry".as_ref())],
+        vec![sim.local_path("blueberry")],
         SetName("set2".into()),
         true,
     )?;
@@ -72,7 +72,7 @@ fn fix_missing_files() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("blueberry".as_ref())],
+        vec![sim.local_path("blueberry")],
         SetName("set2".into()),
         true,
     )?;
@@ -110,7 +110,7 @@ fn dryrun() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("blueberry".as_ref())],
+        vec![sim.local_path("blueberry")],
         SetName("set2".into()),
         true,
     )?;
@@ -156,7 +156,7 @@ fn no_index_update() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("foo/bar/notinrepo".as_ref())],
+        vec![sim.local_path("foo/bar/notinrepo")],
         SetName("set1".into()),
         false,
     )?;
@@ -193,7 +193,7 @@ fn nonexistent_set() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinrepo".as_ref())],
+        vec![sim.local_path("notinrepo")],
         SetName("set2".into()),
         false,
     );
@@ -219,7 +219,7 @@ fn nonexistent_file() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinlocal".as_ref())],
+        vec![sim.local_path("notinlocal")],
         SetName("set1".into()),
         false,
     );
@@ -257,7 +257,7 @@ fn shortcut() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("foo/bar/notinrepo".as_ref())],
+        vec![sim.local_path("foo/bar/notinrepo")],
         SetName("set1".into()),
         false,
     )?;
@@ -293,7 +293,7 @@ fn path_outside_of_shortcut() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinrepo".as_ref())],
+        vec![sim.local_path("notinrepo")],
         SetName("set1".into()),
         false,
     );
@@ -320,7 +320,7 @@ fn only_in_pushed_set() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinrepo".as_ref())],
+        vec![sim.local_path("notinrepo")],
         SetName("set1".into()),
         false,
     )?;
@@ -354,7 +354,7 @@ fn untracked_files() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinrepo".as_ref())],
+        vec![sim.local_path("notinrepo")],
         SetName("set1".into()),
         false,
     )?;
@@ -392,7 +392,7 @@ fn files_in_later_sets() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinrepo".as_ref())],
+        vec![sim.local_path("notinrepo")],
         SetName("set1".into()),
         false,
     )?;
@@ -431,7 +431,7 @@ fn ignores_ignore_file() -> Result<()> {
     let put_result = monja::put(
         &sim.profile()?,
         sim.execution_options(),
-        vec![sim.local_path("notinrepo".as_ref())],
+        vec![sim.local_path("notinrepo")],
         SetName("set1".into()),
         false,
     )?;

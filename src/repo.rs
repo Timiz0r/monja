@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fmt::Display, fs, ops::Deref, path::PathBuf};
 
+use indoc::indoc;
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -99,6 +100,7 @@ impl SetConfig {
         set_name: &SetName,
     ) -> Result<SetConfig, SetConfigError> {
         let config_path = profile.repo_root.join(set_name).join(".monja-set.toml");
+        // is optional file
         let config = fs::read(config_path).unwrap_or_default();
 
         toml::from_slice(&config).map_err(|e| SetConfigError::Deserialization(set_name.clone(), e))
@@ -210,6 +212,18 @@ pub enum StateInitializationError {
     InvalidShortcut(PathBuf, #[source] relative_path::FromPathError),
 }
 
+#[derive(Error, Debug)]
+pub enum SetCreationError {
+    #[error("Failed to create sample .monja-set.toml.")]
+    Config(SetName, #[source] std::io::Error),
+
+    #[error("Failed to create set directory.")]
+    SetCreation(SetName, #[source] std::io::Error),
+
+    #[error("Set already exists.")]
+    SetExists(SetName),
+}
+
 pub(crate) fn initialize_full_state(
     profile: &MonjaProfile,
 ) -> Result<RepoState, Vec<StateInitializationError>> {
@@ -247,6 +261,28 @@ pub(crate) fn initialize_full_state(
     }
 
     Ok(RepoState { sets })
+}
+
+pub(crate) fn create_empty_set(
+    profile: &MonjaProfile,
+    name: &SetName,
+) -> Result<(), SetCreationError> {
+    let set_path = profile.repo_root.join(name);
+    if set_path.exists() {
+        return Err(SetCreationError::SetExists(name.clone()));
+    }
+
+    fs::create_dir_all(&set_path).map_err(|e| SetCreationError::SetCreation(name.clone(), e))?;
+    fs::write(
+        set_path.join(".monja-set.toml"),
+        indoc! {"
+            # Use a shortcut to reduce the amount of initial folder nesting!
+            # shortcut = '.config'
+        "},
+    )
+    .map_err(|e| SetCreationError::Config(name.clone(), e))?;
+
+    Ok(())
 }
 
 fn load_set_state(

@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
+    SetName, repo,
 };
 
 #[derive(Error, Debug)]
@@ -15,8 +16,8 @@ pub enum InitError {
     #[error("Failed to create monja-profile.")]
     Profile(#[source] std::io::Error),
 
-    #[error("Failed to create set directory.")]
-    Set(#[source] std::io::Error),
+    #[error("Failed to create set.")]
+    Set(#[from] repo::SetCreationError),
 
     #[error("Failed to create .monjaignore.")]
     IgnoreFile(#[source] std::io::Error),
@@ -69,26 +70,10 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     )
     .map_err(InitError::Profile)?;
 
-    let set_path = spec.repo_root.join(spec.initial_set_name);
-    fs::create_dir_all(&set_path).map_err(InitError::Set)?;
-
-    fs::write(
-        set_path.join(".monja-set.toml"),
-        indoc! {"
-            # Use a shortcut to reduce the amount of initial folder nesting!
-            # shortcut = '.config'
-        "},
-    )
-    .map_err(InitError::Profile)?;
-
+    // goes before creating profile for ownership reasons
     let ignorefile = spec.local_root.join(".monjaignore");
     if !ignorefile.exists() {
         fs::write(ignorefile, DEFAULT_IGNORE).map_err(InitError::IgnoreFile)?;
-    }
-
-    let readme = spec.repo_root.join("README.md");
-    if !readme.exists() {
-        fs::write(readme, README).map_err(InitError::Readme)?;
     }
 
     let profile = MonjaProfileConfig::load(
@@ -97,6 +82,13 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     )?;
     let profile = MonjaProfile::from_config(profile, spec.local_root, spec.data_root)
         .map_err(MonjaProfileConfigError::Load)?;
+
+    repo::create_empty_set(&profile, &SetName(spec.initial_set_name))?;
+
+    let readme = spec.repo_root.join("README.md");
+    if !readme.exists() {
+        fs::write(readme, README).map_err(InitError::Readme)?;
+    }
 
     Ok(InitSuccess {
         profile: Some(profile),

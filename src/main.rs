@@ -27,6 +27,7 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+#[command(rename_all = "lower")]
 enum Commands {
     /// Initializes a profile with some initial settings.
     ///
@@ -74,6 +75,11 @@ enum Commands {
     /// Note that this command ignores `.monjaignore` files.
     Put(PutCommand),
 
+    /// Creates a new set, with specified files, and adds it to the end of the profile.
+    ///
+    /// Note that this command ignores `.monjaignore` files.
+    NewSet(NewSetCommand),
+
     /// Prints detailed local status information.
     ///
     /// This command prints a few kinds of useful information, which can be filtered by additional args.
@@ -82,11 +88,9 @@ enum Commands {
     LocalStatus(StatusCommand),
 
     /// Prints the repo's directory so that it can be piped into `cd`.
-    #[command(id = "repodir")]
     RepoDir(RepoDirCommand),
 
     /// Prints the repo's directory so that it can be piped into `cd`.
-    #[command(id = "profile")]
     Profile(ProfileCommand),
 }
 
@@ -101,6 +105,7 @@ impl Commands {
             Commands::Pull(command) => command.execute(profile, opts),
             Commands::Clean(command) => command.execute(profile, opts),
             Commands::Put(command) => command.execute(profile, opts),
+            Commands::NewSet(command) => command.execute(profile, opts),
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
             Commands::Profile(command) => command.execute(profile, opts),
@@ -371,27 +376,57 @@ struct PutCommand {
 
 impl PutCommand {
     fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
-        let cwd = std::env::current_dir()?;
-        let mut files = to_local_paths(&profile, &self.files, &cwd, self.no_cwd)?;
+        let cwd = match self.no_cwd {
+            true => &profile.local_root,
+            false => &AbsolutePath::for_existing_path(&std::env::current_dir()?)?,
+        };
+        let owning_set = SetName(self.owning_set);
 
-        let mut stdin_files = read_paths_from_stdin(&profile, &cwd)?;
+        let mut files = to_local_paths(&profile, &self.files, cwd)?;
+
+        let mut stdin_files = read_paths_from_stdin(&profile, cwd)?;
         files.append(&mut stdin_files);
 
         if self.interactive {
-            let mut interactive_files = read_paths_interactively(&profile)?;
+            let status = monja::local_status(
+                &profile,
+                LocalFilePath::from(&profile, &profile.local_root, cwd)?,
+            )?;
+
+            // since files_to_push means the (targeted) set already has the file, we don't need to include them.
+            // additionally, old_files_after_last_pull is a special category that can contain duplicates of the other categories
+            let interactive_files = status
+                .files_with_missing_sets
+                .into_iter()
+                .flat_map(|(_, files)| files)
+                .chain(
+                    status
+                        .missing_files
+                        .into_iter()
+                        .flat_map(|(_, files)| files),
+                )
+                .chain(
+                    status
+                        .files_to_push
+                        .into_iter()
+                        .filter(|(set_name, _)| set_name != &owning_set)
+                        .flat_map(|(_, files)| files),
+                )
+                .chain(status.untracked_files);
+            let mut interactive_files = read_paths_interactively(&profile, interactive_files)?;
             files.append(&mut interactive_files);
         }
 
         // there could hypothetically be duplicates between these three sources, or even in a single source
         // let's just assume the user doesnt. and, for all i know, it'll work just fine.
 
-        let result = monja::put(
-            &profile,
-            &opts,
-            files,
-            SetName(self.owning_set),
-            self.update_index,
-        )?;
+        if files.is_empty() {
+            // could consider it an error, but it's not a big deal that the user didn't provide anything
+            println!("No files selected.");
+            return Ok(());
+        }
+
+        let result = monja::put(&profile, &opts, files, owning_set, self.update_index)?;
 
         println!(
             "Successfully changed the following files to use set `{}` (including copying them to the set):",
@@ -430,6 +465,99 @@ impl PutCommand {
                 println!("\t{}", file);
             }
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Args)]
+struct NewSetCommand {
+    /// The set into which the files will be copied
+    #[arg(long = "set")]
+    new_set: String,
+
+    /// If set, the paths provided will be relative to the local root, ignoring cwd.
+    ///
+    /// This is typically used when using external tools like `fzf` to select files.
+    #[arg(long = "nocwd")]
+    no_cwd: bool,
+
+    /// Uses `fzf` to select local files to copy.
+    #[arg(long, short)]
+    interactive: bool,
+
+    /// The local files to copy.
+    ///
+    /// These will be combined with any newline-delimited files provided through stdin.
+    /// These will also be combined with files provided via `--interactive`.
+    ///
+    /// A limit of 100 paths may be passed through stdin to prevent accidental mass copying.
+    #[arg(last = true)]
+    files: Vec<PathBuf>,
+}
+
+impl NewSetCommand {
+    fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+        let cwd = match self.no_cwd {
+            true => &profile.local_root,
+            false => &AbsolutePath::for_existing_path(&std::env::current_dir()?)?,
+        };
+        let mut files = to_local_paths(&profile, &self.files, cwd)?;
+
+        let mut stdin_files = read_paths_from_stdin(&profile, cwd)?;
+        files.append(&mut stdin_files);
+
+        // even though put is similar, there isn't really room to factor this code out.
+        // most of the code is for combining multiple iterators, and put uses a different set.
+        if self.interactive {
+            let status = monja::local_status(
+                &profile,
+                LocalFilePath::from(&profile, cwd, &profile.local_root)?,
+            )?;
+
+            // old_files_after_last_pull is a special category that can contain duplicates of the other categories
+            let interactive_files = status
+                .files_with_missing_sets
+                .into_iter()
+                .flat_map(|(_, files)| files)
+                .chain(
+                    status
+                        .missing_files
+                        .into_iter()
+                        .flat_map(|(_, files)| files),
+                )
+                .chain(
+                    status
+                        .files_to_push // is the main difference to the code in put
+                        .into_iter()
+                        .flat_map(|(_, files)| files),
+                )
+                .chain(status.untracked_files);
+            let mut interactive_files = read_paths_interactively(&profile, interactive_files)?;
+            files.append(&mut interactive_files);
+        }
+
+        // there could hypothetically be duplicates between these three sources, or even in a single source
+        // let's just assume the user doesnt. and, for all i know, it'll work just fine.
+
+        if files.is_empty() {
+            // could consider it an error, but it's not a big deal that the user didn't provide anything
+            println!("No files selected.");
+            return Ok(());
+        }
+
+        let base = xdg::BaseDirectories::with_prefix("monja");
+        let path = AbsolutePath::for_existing_path(&base.place_config_file("monja-profile.toml")?)?;
+        let result = monja::new_set(&profile, &opts, &path, files, SetName(self.new_set))?;
+
+        println!(
+            "Successfully created new set `{}` with the following files:",
+            result.new_set,
+        );
+        for file in result.files.into_iter() {
+            println!("\t{}", file);
+        }
+        println!("The set has also been added to the profile.");
 
         Ok(())
     }
@@ -564,12 +692,11 @@ impl RepoDirCommand {
 struct ProfileCommand {}
 impl ProfileCommand {
     fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
+        // TODO: dedupe logic. used here, in main, and in NewSetCommand
         let base = xdg::BaseDirectories::with_prefix("monja");
+        let path = base.place_config_file("monja-profile.toml")?;
 
-        println!(
-            "{}",
-            base.place_config_file("monja-profile.toml")?.display()
-        );
+        println!("{}", path.display());
 
         Ok(())
     }
@@ -640,12 +767,7 @@ fn to_local_paths(
     // however, this is just for convenience, as we still use .collect instead of preallocating a vec, for Result reasons
     files: &[impl AsRef<Path>],
     cwd: &Path,
-    no_cwd: bool,
 ) -> anyhow::Result<Vec<LocalFilePath>> {
-    let cwd = match no_cwd {
-        true => &profile.local_root,
-        false => cwd,
-    };
     let files: Result<Vec<LocalFilePath>, monja::LocalFilePathError> = files
         .iter()
         .map(|f| LocalFilePath::from(profile, f.as_ref(), cwd))
@@ -684,34 +806,17 @@ fn read_paths_from_stdin(profile: &MonjaProfile, cwd: &Path) -> anyhow::Result<V
 
 // arguably, this should be moved into operations. will decide later.
 // as-is, this happens before any other validation, such as making sure a set exists
-fn read_paths_interactively(profile: &MonjaProfile) -> anyhow::Result<Vec<LocalFilePath>> {
-    let status = monja::local_status(
-        profile,
-        LocalFilePath::from(profile, &profile.local_root, &profile.local_root)?,
-    )?;
-
-    // since files_to_push means the (targeted) set already has the file, we don't need to include them.
-    // additionally, old_files_after_last_pull is a special category that can contain duplicates of the other categories
-    //
+fn read_paths_interactively(
+    profile: &MonjaProfile,
+    files: impl Iterator<Item = LocalFilePath>,
+) -> anyhow::Result<Vec<LocalFilePath>> {
     // could calculate capacity if necessary, but it's probably fine
     // we use a hashset for deduplication, since a file can be in multiple sets
-    let mut files = HashSet::new();
-    files.extend(
-        status
-            .files_with_missing_sets
-            .into_iter()
-            .flat_map(|(_, files)| files),
-    );
-    files.extend(
-        status
-            .missing_files
-            .into_iter()
-            .flat_map(|(_, files)| files),
-    );
-    files.extend(status.untracked_files);
+    let mut deduped_files = HashSet::new();
+    deduped_files.extend(files);
 
-    let mut sorted_files = Vec::with_capacity(files.len());
-    sorted_files.extend(files);
+    let mut sorted_files = Vec::with_capacity(deduped_files.len());
+    sorted_files.extend(deduped_files);
     sorted_files.sort();
 
     let mut child = Command::new("fzf")
