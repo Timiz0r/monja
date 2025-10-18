@@ -13,7 +13,7 @@ use monja::{
 };
 
 use anyhow::anyhow;
-use clap::{Args, Parser, Subcommand, command};
+use clap::{Args, CommandFactory, Parser, Subcommand, command};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -92,6 +92,9 @@ enum Commands {
 
     /// Prints the repo's directory so that it can be piped into `cd`.
     Profile(ProfileCommand),
+
+    /// Prints the repo's directory so that it can be piped into `cd`.
+    Completions(CompletionsCommand),
 }
 
 // TODO: macro?
@@ -109,6 +112,7 @@ impl Commands {
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
             Commands::Profile(command) => command.execute(profile, opts),
+            Commands::Completions(command) => command.execute(profile, opts),
         }
     }
 }
@@ -697,6 +701,19 @@ impl ProfileCommand {
         let path = base.place_config_file("monja-profile.toml")?;
 
         println!("{}", path.display());
+
+        Ok(())
+    }
+}
+
+#[derive(Args)]
+struct CompletionsCommand {}
+impl CompletionsCommand {
+    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
+        let mut command = Cli::command();
+        let shell =
+            clap_complete::Shell::from_env().ok_or(anyhow!("Unable to determine shell."))?;
+        clap_complete::generate(shell, &mut command, "monja", &mut std::io::stdout().lock());
 
         Ok(())
     }

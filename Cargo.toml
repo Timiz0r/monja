@@ -9,6 +9,7 @@ description = "A very simple to use and easy to reason about multi-machine dotfi
 anyhow = "1.0.100"
 # though, just because there's no strong reason to overcomplicate, there is one type in the monja crate that uses clap
 clap = { version = "4.5.48", features = ["cargo", "derive"] }
+clap_complete = "4.5.59"
 xdg = "3.0.0"
 
 # monja-only. aka don't export them! not a big deal either way, but it's the goal.
