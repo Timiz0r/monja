@@ -21,6 +21,9 @@ using the typical methods for each tool.
 * bat
   * Used for file previews in `fzf`
 
+## Installation
+For now, this isn't uploaded anywhere. To install, checkout the repo and call `cargo install --path .` from the root.
+
 ## Usage
 Quick note: any of the below commands that touch files support the `--dryrun` flag
 to view operations without performing them.
