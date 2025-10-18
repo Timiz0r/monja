@@ -42,10 +42,6 @@ pub struct MonjaProfileConfig {
     pub repo_dir: PathBuf,
     // while a hashset would be handy, we use a vec because order is important
     pub target_sets: Vec<SetName>,
-
-    // TODO: probably remove
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub new_file_set: Option<SetName>,
 }
 
 #[derive(Error, Debug)]
@@ -417,7 +413,6 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
-            new_file_set: None,
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -438,7 +433,6 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
-            new_file_set: None,
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -460,7 +454,6 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
-            new_file_set: None,
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -481,7 +474,6 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
-            new_file_set: None,
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -506,7 +498,6 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
-            new_file_set: None,
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {

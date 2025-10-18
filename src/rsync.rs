@@ -49,9 +49,11 @@ pub(crate) fn rsync(
 
     let status = child.wait_with_output()?;
     if opts.verbosity > 0 {
-        println!("Finished rsync with status {}", status.status);
-        // TODO: would be nice to return this instead?
-        // std::io::stderr().write_all(&status.stderr)?;
+        println!(
+            "Finished rsync for '{}' with status {}",
+            dest.display(),
+            status.status
+        );
     }
 
     match status.status.success() {

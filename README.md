@@ -22,4 +22,8 @@ using the typical methods for each tool.
   * Used for file previews in `fzf`
 
 ## Usage
-TODO
+To get started, use `monja init` to create a default profile and repo.
+The profile is responsible for deciding what sets will be pulled from the repo.
+A default set named after `hostname` will be created.
+A default .monjaignore will also be placed in `$HOME`.
+

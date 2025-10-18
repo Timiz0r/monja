@@ -81,7 +81,6 @@ fn errors_on_existing_profile() -> Result<()> {
     Ok(())
 }
 
-// // TODO: make sure we did dry run tests for everything
 #[gtest]
 fn dry_run() -> Result<()> {
     let mut sim = Simulator::create();

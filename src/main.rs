@@ -84,6 +84,10 @@ enum Commands {
     /// Prints the repo's directory so that it can be piped into `cd`.
     #[command(id = "repodir")]
     RepoDir(RepoDirCommand),
+
+    /// Prints the repo's directory so that it can be piped into `cd`.
+    #[command(id = "profile")]
+    Profile(ProfileCommand),
 }
 
 // TODO: macro?
@@ -99,6 +103,7 @@ impl Commands {
             Commands::Put(command) => command.execute(profile, opts),
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
+            Commands::Profile(command) => command.execute(profile, opts),
         }
     }
 }
@@ -354,7 +359,6 @@ struct PutCommand {
     #[arg(long, short)]
     interactive: bool,
 
-    // TODO: also allow stdin
     /// The local files to copy.
     ///
     /// These will be combined with any newline-delimited files provided through stdin.
@@ -551,6 +555,21 @@ struct RepoDirCommand {}
 impl RepoDirCommand {
     fn execute(&self, profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
         println!("{}", profile.repo_root);
+
+        Ok(())
+    }
+}
+
+#[derive(Args)]
+struct ProfileCommand {}
+impl ProfileCommand {
+    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
+        let base = xdg::BaseDirectories::with_prefix("monja");
+
+        println!(
+            "{}",
+            base.place_config_file("monja-profile.toml")?.display()
+        );
 
         Ok(())
     }

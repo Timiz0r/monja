@@ -22,7 +22,6 @@ pub enum PutError {
     #[error("Failed to load monja-index.toml.")]
     FileIndex(#[from] local::FileIndexError),
 
-    // TODO: refine all of our Io errors
     #[error("Failed to copy local file to repo.")]
     CopyToSet {
         set_name: repo::SetName,

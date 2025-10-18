@@ -41,6 +41,7 @@ Of course, keep in mind that creating an issue may be adviseable for large-scope
   * Key feature. Support any package manager.
 * Git hook to warn against `git pull`ing when a `monja push` hasn't been done recently.
   * Key feature
+* Handling the case where a `monja pull` fails midway between rsync and saving file index.
 * End-to-end tests
   * We'd mainly test that we can invoke the executable correctly, not necessarily every scenario of each subcommand.
 * Permissions
