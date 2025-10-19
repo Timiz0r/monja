@@ -73,7 +73,7 @@ You may get errors like these:
 * > There are local files whose corresponding sets are missing.
 * > There are local files missing from expected sets.
 
-To recover, use `monja put --update-index --set <target set> -- <files>`.
+To recover, use `monja put --set <target set> -- <files>`.
 This command also supports `-i` and line-delimited stdin -- the same as `monja newset`.
 
 Once the affected files have been `monja put` back, you can `monja push` again.

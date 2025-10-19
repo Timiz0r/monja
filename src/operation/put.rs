@@ -56,14 +56,9 @@ pub fn put(
     opts: &ExecutionOptions,
     files: Vec<LocalFilePath>,
     owning_set: repo::SetName,
-    update_index: bool,
 ) -> Result<PutSuccess, PutError> {
     let repo = repo::initialize_full_state(profile).map_err(PutError::RepoStateInitialization)?;
-    let mut index = match update_index {
-        true => local::FileIndex::load(profile, local::IndexKind::Current)?,
-        // will also be unused. mainly just saving time not having to load
-        false => local::FileIndex::new(),
-    };
+    let mut index = local::FileIndex::load(profile, local::IndexKind::Current)?;
 
     let owning_set_pos = profile
         .config
@@ -87,6 +82,7 @@ pub fn put(
             copy_to_set(profile, owning_set, &internal_path)?;
         }
 
+        let mut owning_set_latest_set = true;
         for (set_name, set) in repo.sets.iter() {
             let is_dest_set = owning_set_pos.is_some() && owning_set.name == *set_name;
             // the sets here don't reflect the fact that we're pushing files to
@@ -105,6 +101,8 @@ pub fn put(
                 .iter()
                 .position(|s: &SetName| s == set_name);
             if curr_pos > owning_set_pos {
+                owning_set_latest_set = false;
+
                 // we do an extra get_mut, instead of just using entry, to avoid extra clones of path
                 match files_in_later_sets.get_mut(&path) {
                     Some(sets) => sets.push(set_name.clone()),
@@ -122,12 +120,12 @@ pub fn put(
 
         // updating the index allows the put command to fix issues that happen
         // when the repo is changed in a way that removes files, followed by an attempted push
-        if update_index {
+        if owning_set_latest_set {
             index.set(internal_path, owning_set.name.clone());
         }
     }
 
-    if update_index && !opts.dry_run {
+    if !opts.dry_run {
         index.save(profile, local::IndexKind::Current)?;
     }
 

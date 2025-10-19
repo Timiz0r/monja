@@ -227,7 +227,7 @@ impl PushCommand {
                     "\t* If the files should use a different set (such as the last specified in monja-profile.toml), "
                 );
                 eprint!(
-                    "use some variation of `monja put --update-index` to specify that set and copy files to that set. "
+                    "use some variation of `monja put` to specify that set and copy files to that set. "
                 );
                 eprintln!("Then, use `monja push` to push the rest of the files to the right set.");
 
@@ -357,13 +357,6 @@ struct PutCommand {
     #[arg(long = "nocwd")]
     no_cwd: bool,
 
-    /// If set, the local file index will be updated.
-    ///
-    /// This is typically used to fix issues that arise from `monja push` when files are missing
-    /// from their expected locations in the repo (as determined by the last `monja pull`).
-    #[arg(long, visible_alias = "idx")]
-    update_index: bool,
-
     /// Uses `fzf` to select local files to copy.
     #[arg(long, short)]
     interactive: bool,
@@ -430,7 +423,7 @@ impl PutCommand {
             return Ok(());
         }
 
-        let result = monja::put(&profile, &opts, files, owning_set, self.update_index)?;
+        let result = monja::put(&profile, &opts, files, owning_set)?;
 
         println!(
             "Successfully changed the following files to use set `{}` (including copying them to the set):",

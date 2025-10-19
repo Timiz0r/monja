@@ -58,10 +58,8 @@ pub fn new_set(
         .map_err(|e| NewSetError::SetShortcut(new_set.clone(), shortcut, e))?;
 
     // note that this wouldn't work in a dry run because the set isn't created, causing put to fail
-    // updating the index is safe because, by putting the set last, it'll become the set that gets synced
-    // it's also preferred that the user be able to modify and push immediately without pulling first
     let put_result =
-        operation::put::put(profile, opts, files, new_set, true).map_err(|e| Box::new(e.into()))?;
+        operation::put::put(profile, opts, files, new_set).map_err(|e| Box::new(e.into()))?;
 
     Ok(NewSetSuccess {
         new_set: put_result.owning_set,
