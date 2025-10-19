@@ -104,18 +104,24 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
 const DEFAULT_IGNORE: &str = indoc! {"
     # ignore files are used to keep stuff from getting to the repo from local, and to prevent local from being cleaned
 
-    .*
-    !.config/
-    # it's recommended to put this in sets to keep ignores consistent, but it can also be removed if desired
+    # ignore files in root, but not dirs
+    /*
+    !/*/
+
+    # no hidden files or dirs
+    /.*
+    # allow .config
+    !/.config/
+    # it's recommended to put this in sets, since certain machines may have a different set
     !**/.monjaignore
 
-    Desktop/
-    Documents/
-    Downloads/
-    Music/
-    Pictures/
-    Public/
-    Videos/
+    /Desktop/
+    /Documents/
+    /Downloads/
+    /Music/
+    /Pictures/
+    /Public/
+    /Videos/
 "};
 
 const README: &str = indoc! {"
