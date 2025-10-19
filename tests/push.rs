@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use googletest::prelude::*;
 
@@ -396,6 +396,7 @@ fn ignore() -> Result<()> {
 
     fs_operation! { SetManipulation, sim, "simple",
         file "blueberry" "tart"
+        file ".monjaignore" "blueberry"
     };
 
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
@@ -404,13 +405,17 @@ fn ignore() -> Result<()> {
         file "blueberry" "pie"
     };
 
-    sim.configure_ignorefile("blueberry");
-
     let push_result = monja::push(&sim.profile()?, sim.execution_options())?;
-    expect_that!(push_result.files_pushed, is_empty());
+    expect_that!(push_result.files_pushed, {
+        (
+            pat!(SetName("simple")),
+            unordered_elements_are![eq(Path::new(".monjaignore"))],
+        )
+    });
 
     fs_operation! { SetValidation, sim, "simple",
         file "blueberry" "tart"
+        file ".monjaignore" "blueberry"
     };
 
     Ok(())

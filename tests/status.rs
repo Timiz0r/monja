@@ -165,6 +165,13 @@ fn ignore() -> Result<()> {
     fs_operation! { SetManipulation, sim, "set2",
         file "set2a" "set2a"
         file "set2b" "set2b"
+        file ".monjaignore"
+        "
+set2a
+set1
+set2b
+notinrepo
+    "
     };
 
     let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
@@ -177,21 +184,17 @@ fn ignore() -> Result<()> {
         file "notinrepo" "notinrepo"
     };
 
-    sim.configure_ignorefile(
-        "
-set2a
-set1
-set2b
-notinrepo
-    ",
-    );
-
     let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     // an argument can be made that this should contain files in the index (and don't fall under the other categories),
     // like when we manually commit files that are in .gitignore.
     // one reason we're not doing that is because it's hard to do with the ignore crate.
     // the way to do it would probably be to build an Overrides that contains entries that are in the index and exist in the repo.
-    expect_that!(status.files_to_push, is_empty());
+    expect_that!(status.files_to_push, {
+        (
+            pat!(SetName("set2")),
+            unordered_elements_are![eq(Path::new(".monjaignore"))],
+        )
+    });
     expect_that!(status.files_with_missing_sets, is_empty());
     expect_that!(status.missing_files, is_empty());
     expect_that!(status.untracked_files, is_empty());

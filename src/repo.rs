@@ -266,7 +266,7 @@ pub(crate) fn initialize_full_state(
 pub(crate) fn create_empty_set(
     profile: &MonjaProfile,
     name: &SetName,
-) -> Result<(), SetCreationError> {
+) -> Result<AbsolutePath, SetCreationError> {
     let set_path = profile.repo_root.join(name);
     if set_path.exists() {
         return Err(SetCreationError::SetExists(name.clone()));
@@ -282,7 +282,7 @@ pub(crate) fn create_empty_set(
     )
     .map_err(|e| SetCreationError::Config(name.clone(), e))?;
 
-    Ok(())
+    Ok(AbsolutePath::for_existing_path(&set_path).expect("Just created it."))
 }
 
 fn load_set_state(

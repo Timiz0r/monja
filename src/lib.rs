@@ -347,7 +347,6 @@ static MONJA_SPECIAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
         OsString::from("monja-profile.toml"),
         OsString::from("monja-index.toml"),
         OsString::from("monja-index-prev.toml"),
-        OsString::from(".monjaignore"),
     ])
 });
 pub fn is_monja_special_file(path: &Path) -> bool {

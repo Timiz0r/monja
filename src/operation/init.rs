@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
-    SetName, repo,
+    PullError, SetName, repo,
 };
 
 #[derive(Error, Debug)]
@@ -27,6 +27,9 @@ pub enum InitError {
 
     #[error("Failed to load newly created profile.")]
     ProfileLoad(#[from] MonjaProfileConfigError),
+
+    #[error("Failed to perform initial pull.")]
+    InitialPull(#[from] PullError),
 }
 
 #[derive(Debug)]
@@ -70,12 +73,6 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     )
     .map_err(InitError::Profile)?;
 
-    // goes before creating profile for ownership reasons
-    let ignorefile = spec.local_root.join(".monjaignore");
-    if !ignorefile.exists() {
-        fs::write(ignorefile, DEFAULT_IGNORE).map_err(InitError::IgnoreFile)?;
-    }
-
     let profile = MonjaProfileConfig::load(
         &AbsolutePath::for_existing_path(&spec.profile_config_path)
             .expect("Just made the profile file."),
@@ -83,12 +80,20 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     let profile = MonjaProfile::from_config(profile, spec.local_root, spec.data_root)
         .map_err(MonjaProfileConfigError::Load)?;
 
-    repo::create_empty_set(&profile, &SetName(spec.initial_set_name))?;
+    let set_path = repo::create_empty_set(&profile, &SetName(spec.initial_set_name))?;
+
+    // goes before creating profile for move reasons
+    let ignorefile = set_path.join(".monjaignore");
+    fs::write(ignorefile, DEFAULT_IGNORE).map_err(InitError::IgnoreFile)?;
 
     let readme = spec.repo_root.join("README.md");
     if !readme.exists() {
         fs::write(readme, README).map_err(InitError::Readme)?;
     }
+
+    // any files placed in the set here (like .monjaignore) need to be pulled
+    // we don't write directly to the local dir because we want them to be in the index
+    crate::operation::pull::pull(&profile, opts)?;
 
     Ok(InitSuccess {
         profile: Some(profile),
@@ -101,8 +106,8 @@ const DEFAULT_IGNORE: &str = indoc! {"
 
     .*
     !.config/
-    # it's recommended to put this in sets, since certain machines may have a different set
-    !.monjaignore
+    # it's recommended to put this in sets to keep ignores consistent, but it can also be removed if desired
+    !**/.monjaignore
 
     Desktop/
     Documents/

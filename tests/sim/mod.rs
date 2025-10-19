@@ -158,12 +158,6 @@ impl Simulator {
 
         self
     }
-
-    pub(crate) fn configure_ignorefile(&self, ignore_spec: &str) -> &Self {
-        fs::write(self.local_root.path().join(".monjaignore"), ignore_spec).unwrap();
-
-        self
-    }
 }
 
 pub(crate) trait OperationHandler {

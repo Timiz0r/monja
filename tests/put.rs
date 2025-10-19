@@ -420,13 +420,13 @@ fn ignores_ignore_file() -> Result<()> {
     });
 
     fs_operation! { SetManipulation, sim, "set1",
+        file ".monjaignore" "notinrepo"
     };
+    _ = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { LocalManipulation, sim,
         file "notinrepo" "notinrepo"
     };
-
-    sim.configure_ignorefile("notinrepo");
 
     let put_result = monja::put(
         &sim.profile()?,
@@ -438,6 +438,7 @@ fn ignores_ignore_file() -> Result<()> {
 
     fs_operation! { SetValidation, sim, "set1",
         file "notinrepo" "notinrepo"
+        file ".monjaignore" "notinrepo"
     };
 
     Ok(())

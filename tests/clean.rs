@@ -78,18 +78,23 @@ fn index_clean_ignorefile() -> Result<()> {
         end
     };
 
-    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    // old index will have foo/bar
+    let _ = monja::pull(&sim.profile()?, sim.execution_options())?;
 
     fs_operation! { SetManipulation, sim, "set1",
         dir "foo"
             remfile "bar"
         end
+        file ".monjaignore" "foo/bar"
     };
 
-    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
-    expect_that!(pull_result.cleanable_files, { Path::new("foo/bar") });
+    fs_operation! { LocalManipulation, sim,
+        file "notignored" "notignored"
+    };
 
-    sim.configure_ignorefile("foo/bar");
+    // new index doesn't have foo/bar, so should be eligible for index clean if not for ignore
+    let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
+    expect_that!(pull_result.cleanable_files, is_empty());
 
     let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Index)?;
     expect_that!(clean_result.files_cleaned, is_empty());
@@ -98,6 +103,8 @@ fn index_clean_ignorefile() -> Result<()> {
         dir "foo"
             file "bar" "baz"
         end
+        file "notignored" "notignored"
+        file ".monjaignore" "foo/bar"
     };
 
     Ok(())
@@ -167,36 +174,29 @@ fn full_clean_ignorefile() -> Result<()> {
     });
 
     fs_operation! { SetManipulation, sim, "set1",
+        file ".monjaignore" "foo/bar"
+    };
+
+    _ = monja::pull(&sim.profile()?, sim.execution_options())?;
+
+    fs_operation! { LocalManipulation, sim,
         dir "foo"
             file "bar" "baz"
         end
-    };
-
-    let _pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
-
-    fs_operation! { SetManipulation, sim, "set1",
-        dir "foo"
-            remfile "bar"
-        end
+        file "notignored" "notignored"
     };
 
     let pull_result = monja::pull(&sim.profile()?, sim.execution_options())?;
-    expect_that!(pull_result.cleanable_files, { Path::new("foo/bar") });
+    expect_that!(pull_result.cleanable_files, is_empty());
 
-    fs_operation! { LocalManipulation, sim,
-        file "notinset" "notinset"
-    };
-
-    sim.configure_ignorefile("foo/bar\nnotinset");
-
-    let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Index)?;
-    expect_that!(clean_result.files_cleaned, is_empty());
+    let clean_result = monja::clean(&sim.profile()?, sim.execution_options(), CleanMode::Full)?;
+    expect_that!(clean_result.files_cleaned, { eq(Path::new("notignored")) });
 
     fs_operation! { LocalValidation, sim,
-        file "notinset" "notinset"
         dir "foo"
             file "bar" "baz"
         end
+        file ".monjaignore" "foo/bar"
     };
 
     Ok(())
