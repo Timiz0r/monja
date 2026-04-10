@@ -210,3 +210,76 @@ notinrepo
 
     Ok(())
 }
+
+#[gtest]
+fn ignore_multi_component_path() -> Result<()> {
+    let sim = Simulator::create();
+
+    fs_operation! { LocalManipulation, sim,
+        dir "foo"
+            dir "bar"
+            end
+        end
+        file ".monjaignore"
+        "
+foo/bar/baz
+    "
+        file "foo/bar/baz" "baz"
+        file "foo/bar/welp" "welp"
+    };
+
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
+    expect_that!(status.untracked_files, {
+        eq(Path::new(".monjaignore")),
+        eq(Path::new("foo/bar/welp"))
+    });
+
+    Ok(())
+}
+
+#[gtest]
+fn ignore_directory_with_exception() -> Result<()> {
+    let sim = Simulator::create();
+
+    fs_operation! { LocalManipulation, sim,
+    dir "foo"
+    end
+        file ".monjaignore"
+        "
+foo/
+!foo/bar
+    "
+        file "foo/bar" "bar"
+        file "foo/baz" "baz"
+    };
+
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
+    expect_that!(status.untracked_files, { eq(Path::new(".monjaignore")) });
+
+    Ok(())
+}
+
+#[gtest]
+fn ignore_children_with_exception() -> Result<()> {
+    let sim = Simulator::create();
+
+    fs_operation! { LocalManipulation, sim,
+        dir "foo"
+        end
+        file ".monjaignore"
+        "
+foo/*
+!foo/bar
+    "
+        file "foo/bar" "bar"
+        file "foo/baz" "baz"
+    };
+
+    let status = monja::local_status(&sim.profile()?, sim.cwd())?;
+    expect_that!(status.untracked_files, {
+        eq(Path::new(".monjaignore")),
+        eq(Path::new("foo/bar"))
+    });
+
+    Ok(())
+}
