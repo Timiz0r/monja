@@ -82,15 +82,13 @@ pub fn put(
             copy_to_set(profile, owning_set, &internal_path)?;
         }
 
-        let mut owning_set_latest_set = true;
+        // track which sets contain this file for reporting purposes
         for (set_name, set) in repo.sets.iter() {
             let is_dest_set = owning_set_pos.is_some() && owning_set.name == *set_name;
-            // the sets here don't reflect the fact that we're pushing files to
             if !is_dest_set && !set.tracks_file(&internal_path) {
                 continue;
             }
 
-            // checking contains first to avoid extra clones
             if !tracked_files.contains(&path) {
                 tracked_files.insert(path.clone());
             }
@@ -101,9 +99,6 @@ pub fn put(
                 .iter()
                 .position(|s: &SetName| s == set_name);
             if curr_pos > owning_set_pos {
-                owning_set_latest_set = false;
-
-                // we do an extra get_mut, instead of just using entry, to avoid extra clones of path
                 match files_in_later_sets.get_mut(&path) {
                     Some(sets) => sets.push(set_name.clone()),
                     None => {
@@ -120,7 +115,9 @@ pub fn put(
 
         // updating the index allows the put command to fix issues that happen
         // when the repo is changed in a way that removes files, followed by an attempted push
-        if owning_set_latest_set {
+        let owner = repo.get_owning_set(profile, &internal_path);
+        let owner_pos = owner.and_then(|o| profile.config.target_sets.iter().position(|s| s == o));
+        if owning_set_pos >= owner_pos {
             index.set(internal_path, owning_set.name.clone());
         }
     }

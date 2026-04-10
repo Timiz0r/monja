@@ -25,15 +25,16 @@ pub mod operation {
     pub mod pull;
     pub mod push;
     pub mod put;
+    pub mod set_shortcut;
     pub mod status;
     pub mod transfer;
 }
 
 pub use crate::{
     operation::clean::*, operation::init::*, operation::new_set::*, operation::pull::*,
-    operation::push::*, operation::put::*, operation::status::*, operation::transfer::*,
-    repo::SetConfig, repo::SetConfigError, repo::SetCreationError, repo::SetName,
-    repo::SetShortcutError,
+    operation::push::*, operation::put::*, operation::set_shortcut::*, operation::status::*,
+    operation::transfer::*, repo::SetConfig, repo::SetConfigError, repo::SetCreationError,
+    repo::SetName, repo::SetShortcutError,
 };
 
 pub type LocalStateInitializationError = local::StateInitializationError;

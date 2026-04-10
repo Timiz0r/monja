@@ -82,56 +82,34 @@ pub fn transfer(
         .get(&dest_set)
         .ok_or_else(|| TransferError::DestSetNotFound(dest_set.clone()))?;
 
-    let dest_set_pos = profile
-        .config
-        .target_sets
-        .iter()
-        .position(|s| *s == dest_set);
-
     let mut result_files = Vec::with_capacity(files.len());
-    for path in files.into_iter() {
-        let internal_path = path.to_internal();
+    for public_file in files.into_iter() {
+        let file = public_file.to_internal();
 
-        if !source.tracks_file(&internal_path) {
+        if !source.tracks_file(&file) {
             return Err(TransferError::NotInSourceSet {
                 set_name: source_set.clone(),
-                local_path: path,
+                local_path: public_file,
             });
         }
 
-        // validate destination path before doing anything
-        dest.get_repo_absolute_path_for(&internal_path)?;
+        // validate destination path before doing anything.
+        // this would fail if the file would become outside the set.
+        let _ = dest.get_repo_relative_path_for(&file)?;
 
         if !opts.dry_run {
-            copy_to_dest(profile, dest, &internal_path)?;
-            remove_from_source(source, &internal_path)?;
+            copy_to_dest(profile, dest, &file)?;
+            remove_from_source(source, &file)?;
         }
 
-        // update the index if the dest set is the latest set for this file
-        let mut dest_is_latest = true;
-        for (set_name, set) in repo.sets.iter() {
-            if *set_name == dest_set || *set_name == source_set {
-                continue;
-            }
-            if !set.tracks_file(&internal_path) {
-                continue;
-            }
-            let curr_pos = profile
-                .config
-                .target_sets
-                .iter()
-                .position(|s| s == set_name);
-            if curr_pos > dest_set_pos {
-                dest_is_latest = false;
-                break;
-            }
+        let owner = repo
+            .get_owning_set(profile, &file)
+            .expect("File is tracked by source set, so it should have an owner");
+        if *owner == dest_set || *owner == source_set {
+            index.set(file, dest_set.clone());
         }
 
-        if dest_is_latest {
-            index.set(internal_path, dest_set.clone());
-        }
-
-        result_files.push(path);
+        result_files.push(public_file);
     }
 
     if !opts.dry_run {

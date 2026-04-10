@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use googletest::prelude::*;
-use monja::{MonjaProfileConfig, TransferError, SetConfig, SetName};
+use monja::{MonjaProfileConfig, SetConfig, SetName, TransferError};
 
 use crate::sim::{Simulator, set_names};
 
@@ -38,7 +38,6 @@ fn basic_move() -> Result<()> {
     expect_that!(result.dest_set, pat!(SetName("set2")));
     expect_that!(result.files, { eq(Path::new("apple")) });
 
-    // file should be in dest set and removed from source set
     fs_operation! { SetValidation, sim, "set2",
         file "apple" "pie"
     };
@@ -74,7 +73,6 @@ fn move_updates_index() -> Result<()> {
         SetName("set2".into()),
     )?;
 
-    // after the move, status should show "apple" as files_to_push under set2
     let status = monja::local_status(&sim.profile()?, sim.cwd())?;
     expect_that!(status.files_to_push, {
         (
@@ -109,9 +107,9 @@ fn source_set_not_found() -> Result<()> {
     );
     expect_that!(
         result,
-        err(pat!(TransferError::SourceSetNotFound(
-            &SetName("nonexistent".into())
-        )))
+        err(pat!(TransferError::SourceSetNotFound(&SetName(
+            "nonexistent".into()
+        ))))
     );
 
     Ok(())
@@ -140,9 +138,9 @@ fn dest_set_not_found() -> Result<()> {
     );
     expect_that!(
         result,
-        err(pat!(TransferError::DestSetNotFound(
-            &SetName("nonexistent".into())
-        )))
+        err(pat!(TransferError::DestSetNotFound(&SetName(
+            "nonexistent".into()
+        ))))
     );
 
     Ok(())
@@ -205,7 +203,6 @@ fn dest_shortcut_incompatible() -> Result<()> {
     );
     expect_that!(result, err(pat!(TransferError::DestSetPath(..))));
 
-    // source set should be untouched since we fail before modifying
     fs_operation! { SetValidation, sim, "set1",
         file "apple" "pie"
     };
@@ -240,11 +237,9 @@ fn dryrun() -> Result<()> {
 
     expect_that!(result.files, { eq(Path::new("apple")) });
 
-    // source set should be untouched
     fs_operation! { SetValidation, sim, "set1",
         file "apple" "pie"
     };
-    // dest set should be empty
     fs_operation! { SetValidation, sim, "set2",
         remfile "apple"
     };

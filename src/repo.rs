@@ -12,6 +12,21 @@ pub(crate) struct RepoState {
     pub sets: HashMap<SetName, Set>,
 }
 
+impl RepoState {
+    pub(crate) fn get_owning_set<'a>(
+        &self,
+        profile: &'a MonjaProfile,
+        file: &local::FilePath,
+    ) -> Option<&'a SetName> {
+        profile
+            .config
+            .target_sets
+            .iter()
+            .rev()
+            .find(|name| self.sets.get(*name).is_some_and(|s| s.tracks_file(file)))
+    }
+}
+
 pub(crate) struct Set {
     pub name: SetName,
     pub shortcut: SetShortcut,

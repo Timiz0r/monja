@@ -87,6 +87,12 @@ enum Commands {
     #[command(name = "transfer")]
     Transfer(TransferCommand),
 
+    /// Changes a set's shortcut path.
+    ///
+    /// The shortcut determines the common prefix stripped from local paths when storing files in the set.
+    /// All existing files in the set must be representable under the new shortcut.
+    SetShortcut(SetShortcutCommand),
+
     /// Creates a new set, with specified files, and adds it to the end of the profile.
     ///
     /// Note that this command ignores `.monjaignore` files.
@@ -121,6 +127,7 @@ impl Commands {
             Commands::Clean(command) => command.execute(profile, opts),
             Commands::Put(command) => command.execute(profile, opts),
             Commands::Transfer(command) => command.execute(profile, opts),
+            Commands::SetShortcut(command) => command.execute(profile, opts),
             Commands::NewSet(command) => command.execute(profile, opts),
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
@@ -553,6 +560,67 @@ impl TransferCommand {
         for file in result.files.into_iter() {
             println!("\t{}", file);
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Args)]
+struct SetShortcutCommand {
+    /// The set whose shortcut to change
+    #[arg(long = "set", add = ArgValueCandidates::new(completions::set_names))]
+    set_name: String,
+
+    /// The new shortcut path (relative to local root)
+    path: PathBuf,
+}
+impl SetShortcutCommand {
+    fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
+        let path = if self.path.is_absolute() {
+            self.path
+        } else {
+            let cwd = AbsolutePath::for_existing_path(&std::env::current_dir()?)?;
+            cwd.join(&self.path)
+        };
+        let path = path
+            .strip_prefix(&profile.local_root)
+            .map_err(|_| {
+                anyhow!(
+                    "Path '{}' is not under local root '{}'",
+                    path.display(),
+                    profile.local_root
+                )
+            })?
+            .to_path_buf();
+
+        let set_name = SetName(self.set_name);
+
+        let result = monja::set_shortcut(&profile, &opts, set_name, path)?;
+
+        if result.old_shortcut.as_os_str().is_empty() {
+            println!(
+                "Set `{}` shortcut changed from (none) to '{}'.",
+                result.set_name,
+                result.new_shortcut.display()
+            );
+        } else if result.new_shortcut.as_os_str().is_empty() {
+            println!(
+                "Set `{}` shortcut changed from '{}' to (none).",
+                result.set_name,
+                result.old_shortcut.display()
+            );
+        } else {
+            println!(
+                "Set `{}` shortcut changed from '{}' to '{}'.",
+                result.set_name,
+                result.old_shortcut.display(),
+                result.new_shortcut.display()
+            );
+        }
+        for file in result.files_moved.iter() {
+            println!("\t{}", file.display());
+        }
+        println!("{} file(s) restructured.", result.files_moved.len());
 
         Ok(())
     }
