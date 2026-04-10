@@ -13,7 +13,10 @@ use monja::{
 };
 
 use anyhow::anyhow;
-use clap::{Args, CommandFactory, Parser, Subcommand, command};
+use clap::{Args, Parser, Subcommand, command};
+use clap_complete::engine::ArgValueCandidates;
+
+mod completions;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -103,7 +106,7 @@ enum Commands {
     Profile(ProfileCommand),
 
     /// Prints the repo's directory so that it can be piped into `cd`.
-    Completions(CompletionsCommand),
+    Completions(completions::CompletionsCommand),
 }
 
 // TODO: macro?
@@ -122,7 +125,7 @@ impl Commands {
             Commands::LocalStatus(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
             Commands::Profile(command) => command.execute(profile, opts),
-            Commands::Completions(command) => command.execute(profile, opts),
+            Commands::Completions(command) => command.execute(),
         }
     }
 }
@@ -358,7 +361,7 @@ impl CleanCommand {
 #[derive(Args)]
 struct PutCommand {
     /// The set into which the files will be copied
-    #[arg(long = "set")]
+    #[arg(long = "set", add = ArgValueCandidates::new(completions::set_names))]
     owning_set: String,
 
     /// If set, the paths provided will be relative to the local root, ignoring cwd.
@@ -480,11 +483,11 @@ impl PutCommand {
 #[derive(Args)]
 struct TransferCommand {
     /// The set to move files from
-    #[arg(long = "from")]
+    #[arg(long = "from", add = ArgValueCandidates::new(completions::set_names))]
     source_set: String,
 
     /// The set to move files to
-    #[arg(long = "to")]
+    #[arg(long = "to", add = ArgValueCandidates::new(completions::set_names))]
     dest_set: String,
 
     /// If set, the paths provided will be relative to the local root, ignoring cwd.
@@ -787,20 +790,9 @@ impl ProfileCommand {
     }
 }
 
-#[derive(Args)]
-struct CompletionsCommand {}
-impl CompletionsCommand {
-    fn execute(&self, _profile: MonjaProfile, _opts: ExecutionOptions) -> anyhow::Result<()> {
-        let mut command = Cli::command();
-        let shell =
-            clap_complete::Shell::from_env().ok_or(anyhow!("Unable to determine shell."))?;
-        clap_complete::generate(shell, &mut command, "monja", &mut std::io::stdout().lock());
-
-        Ok(())
-    }
-}
-
 fn main() -> anyhow::Result<()> {
+    completions::init();
+
     // goes first so that help and version commands can work before our code
     let cli = Cli::parse();
 
