@@ -2,10 +2,9 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::{
-    AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, RepoFilePath, SetName,
-    convert_set_repofile_result, local, repo, rsync::rsync,
-};
+use crate::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName, repo};
+
+use super::{RepoFilePath, convert_set_repofile_result, local, rsync::rsync};
 
 #[derive(Error, Debug)]
 pub enum PullError {

@@ -34,7 +34,8 @@ just to avoid potentially wasting time on something that won't make it in.
 
 ## Bugs and improvements
 These don't necessarily need an issue and can just be worked on whenever -- though issues are certainly handy.
-Of course, keep in mind that creating an issue may be adviseable for large-scoped changes -- as per above, to avoid time wastage.
+Of course, keep in mind that creating an issue may be adviseable for large-scoped changes --
+as per above, to avoid time wastage.
 
 ## Features on the todo list
 * Packages
@@ -45,7 +46,8 @@ Of course, keep in mind that creating an issue may be adviseable for large-scope
 * End-to-end tests
   * We'd mainly test that we can invoke the executable correctly, not necessarily every scenario of each subcommand.
 * Permissions
-  * Not too important. Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
+  * Not too important.
+    Git tracks execution bit, owner is probably all the same, and rw permission are also probably all the same.
 * Diff/merge between local and sets
   * QoL
 * Storing profiles in repo
@@ -65,12 +67,15 @@ Probably the most incomplete section of them all!
 
 The project *roughly* follows the ports-and-adapters pattern (aka is *roughly* hexagonally architectured).
 Currently, there is only one application, signified by the `monja` crate (`lib.rs`).
-Also see [this handy but insightful video on ports-and-adapters](https://www.youtube.com/watch?v=EZ05e7EMOLM) if you're interested!
+Also see [this handy but insightful video on ports-and-adapters](https://www.youtube.com/watch?v=EZ05e7EMOLM)
+if you're interested!
 Perhaps the biggest consequence is in automated testing, which we'll get to later.
 
-The publicly exposed code found in `monja` are the driver ports (concrete types/functions that call into the application).
-Each major operation, or sets of operations, are in their own module under `monja::operation`, which all gets reexported.
-`lib.rs` contains bits that are both public and reasonably common.
+The publicly exposed code found in `monja` are the driver ports
+(concrete types/functions that call into the application).
+Each major operation, or sets of operations, are in their own module.
+File-management operations (`push`, `pull`, `clean`, `put`, `transfer`, `set_shortcut`, `status`) live together
+under `monja::file`.
 
 Integration tests and the main function are the driver adapters that drive these ports.
 
@@ -87,9 +92,11 @@ As such, we haven't done much abstraction around rsync, aside from the function 
 Implementing our own copying isn't out of the question, though, should someone do the work of implementing it!
 
 ### Automated testing
-We generally wouldn't use "Rust-style" unit tests, since ports-and-adapters prefer us verifying our application at its boundaries
+We generally wouldn't use "Rust-style" unit tests,
+since ports-and-adapters prefer us verifying our application at its boundaries
 (in order to get coverage over all of the application, and cover it similarly to how it will be used in pratice).
-These kinds of tests would be done through "Rust-style" integration test. But, again, we don't have these kinds of tests.
+These kinds of tests would be done through "Rust-style" integration test.
+But, again, we don't have these kinds of tests.
 Still, "Rust-style" unit tests (within a `tests` sub module) aren't banned or anything and can be used where useful,
 as long as they don't cause any tight-coupling that makes the code hard to change.
 
@@ -105,7 +112,8 @@ so I'm very open to all sorts of improvements.
 ### Encapsulation
 In general, for both internal and public structs, prefer no encapsulation --
 aka expose fields publicly and don't use getters and setters.
-By not encapsulating, we allow partial-borrows and partial-moves, plus the code quality and performance benefits of them.
+By not encapsulating, we allow partial-borrows and partial-moves,
+plus the code quality and performance benefits of them.
 
 Choosing to encapsulate mainly depends on the usual considerations:
 * Importance and difficulty of maintaining a public interface

@@ -7,9 +7,11 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile, SetName, local,
+    ExecutionOptions, LocalFilePath, MonjaProfile, SetName,
     repo::{self, SetPathError},
 };
+
+use super::local;
 
 #[derive(Error, Debug)]
 pub enum PutError {
@@ -99,15 +101,10 @@ pub fn put(
                 .iter()
                 .position(|s: &SetName| s == set_name);
             if curr_pos > owning_set_pos {
-                match files_in_later_sets.get_mut(&path) {
-                    Some(sets) => sets.push(set_name.clone()),
-                    None => {
-                        files_in_later_sets
-                            .entry(path.clone())
-                            .or_default()
-                            .push(set_name.clone());
-                    }
-                };
+                files_in_later_sets
+                    .entry(path.clone())
+                    .or_default()
+                    .push(set_name.clone());
             }
         }
 
@@ -135,10 +132,7 @@ pub fn put(
         owning_set: owning_set.name.clone(),
         files: result_files,
         set_is_targeted: owning_set_pos.is_some(),
-        files_in_later_sets: files_in_later_sets
-            .into_iter()
-            .map(|(path, sets)| (path.clone(), sets))
-            .collect(),
+        files_in_later_sets: files_in_later_sets.into_iter().collect(),
         untracked_files,
     })
 }

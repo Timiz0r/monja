@@ -1,6 +1,8 @@
 use thiserror::Error;
 
-use crate::{LocalFilePath, MonjaProfile, convert_set_localfile_result, local, repo};
+use crate::{LocalFilePath, MonjaProfile, repo};
+
+use super::{convert_set_localfile_result, local};
 
 #[derive(Error, Debug)]
 pub enum StatusError {

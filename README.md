@@ -1,14 +1,16 @@
 # Monja
-Monjayaki ( もんじゃ焼き : /moɴd͡ʑa jaːki/ ), often shortened to monja, is a delicious Japanese food that I can't really describe properly.
+Monjayaki ( もんじゃ焼き : /moɴd͡ʑa jaːki/ ), often shortened to monja, is a delicious Japanese food
+that I can't really describe properly.
 I just like naming projects after my favorite foods 🤷.
 
-As far as this project is concerned, Monja is a very simple to use and easy to reason about multi-machine dotfiles manager.
+As far as this project is concerned,
+Monja is a very simple to use and easy to reason about multi-machine dotfiles manager.
 Files are stored in a `sets` found in a `repo`,
 and a portion (or all) of these sets can be chosen to be synchronized locally.
 If a file is found in multiple sets, then the latest set's file wins.
 
-There is no templating engine. Instead, split files across sets in some appropriate way, and,
-if config duplication becomes a concern,
+There is no templating engine. Instead, split files across sets in some appropriate way,
+and, if config duplication becomes a concern,
 use the right configurations to source/import/include/configure the right parts for the right machine,
 using the typical methods for each tool.
 
@@ -41,7 +43,7 @@ A default .monjaignore will also be placed in `$HOME`.
 By default, it filters out most directories from `$HOME` but allows `.config`.
 
 ### Adding files to repo
-Files can be added to the default set with `monja put -i`.
+Files can be added to the default set with `monja file put -i`.
 This starts `fzf` with the list of files in cwd -- except those already in the set.
 You can also disregard cwd and pick from any file in `$HOME` (sans ignored) by adding the `--nocwd` flag.
 
@@ -59,40 +61,43 @@ You'll probably want to turn your monja repo into a git repo.
 You can navigate to it quickly with `monja repodir | cd`.
 
 ### Pushing to the repo
-To put local changes into the repo, simply run `monja push`.
+To put local changes into the repo, simply run `monja file push`.
 Any file that was previously pulled (or `monja newset`ed) will be copied to the repo, into the set from whence it came.
 
-**Important:** `monja push` may fail depending on modifications done to the repo.
-`monja push` keeps a local index that maps files to a corresponding set.
-If these files are removed or otherwise don't match up, `monja push` will fail.
-As such, it is recommended to `monja push` before `git pull`ing in the repo.
+**Important:** `monja file push` may fail depending on modifications done to the repo.
+`monja file push` keeps a local index that maps files to a corresponding set.
+If these files are removed or otherwise don't match up, `monja file push` will fail.
+As such, it is recommended to `monja file push` before `git pull`ing in the repo.
 Still, there are ways to recover from this issue if it happens.
 
-#### Recovering from broken `monja push`
+#### Recovering from broken `monja file push`
 You may get errors like these:
 * > There are local files whose corresponding sets are missing.
 * > There are local files missing from expected sets.
 
-To recover, use `monja put --set <target set> -- <files>`.
+To recover, use `monja file put --set <target set> -- <files>`.
 This command also supports `-i` and line-delimited stdin -- the same as `monja newset`.
 
-Once the affected files have been `monja put` back, you can `monja push` again.
+Once the affected files have been `monja file put` back, you can `monja file push` again.
 
 ### Pulling from the repo
-**Important:** `monja pull` will happily overwrite local files without warning, so be sure to `monja push` first.
+**Important:** `monja file pull` will happily overwrite local files without warning,
+so be sure to `monja file push` first.
 
-To pull from the repo, simply run `monja pull`.
+To pull from the repo, simply run `monja file pull`.
 It copies the files from the sets targeted by the profile and copies it locally.
 If the same file is in multiple sets, the latest set's file wins.
 
 ### Cleaning
 There are two kinds of clean: index and full.
 
-The default index clean can be invoked with `monja clean`. It will look at the diff between the last two `monja pull`s
+The default index clean can be invoked with `monja file clean`.
+It will look at the diff between the last two `monja file pull`s
 and only remove the files that were in the older pull but not the newer pull.
 
 By adding the `--full` flag, the full local state will be compared to the repo,
 and any file not in the repo (but local) will be removed.
 
 The clean command will list the files to be cleaned and ask for confirmation.
-You can also use the `--dryrun` flag to see the output of operations like `monja clean` without actually performing them.
+You can also use the `--dryrun` flag to see the output of operations like `monja file clean`
+without actually performing them.

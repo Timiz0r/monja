@@ -2,7 +2,7 @@
 #![deny(clippy::unwrap_used)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     ffi::{OsStr, OsString},
     io::{Read, Write},
     ops::Deref,
@@ -15,29 +15,20 @@ use relative_path::{PathExt, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) mod local;
+pub mod file;
 pub(crate) mod repo;
-pub(crate) mod rsync;
-pub mod operation {
-    pub mod clean;
-    pub mod init;
-    pub mod new_set;
-    pub mod pull;
-    pub mod push;
-    pub mod put;
-    pub mod set_shortcut;
-    pub mod status;
-    pub mod transfer;
-}
+
+pub mod init;
+pub mod new_set;
 
 pub use crate::{
-    operation::clean::*, operation::init::*, operation::new_set::*, operation::pull::*,
-    operation::push::*, operation::put::*, operation::set_shortcut::*, operation::status::*,
-    operation::transfer::*, repo::SetConfig, repo::SetConfigError, repo::SetCreationError,
-    repo::SetName, repo::SetShortcutError,
+    file::RepoFilePath, file::clean::*, file::pull::*, file::push::*, file::put::*,
+    file::set_shortcut::*, file::status::*, file::transfer::*, init::*, new_set::*,
+    repo::SetConfig, repo::SetConfigError, repo::SetCreationError, repo::SetName,
+    repo::SetShortcutError,
 };
 
-pub type LocalStateInitializationError = local::StateInitializationError;
+pub type LocalStateInitializationError = file::local::StateInitializationError;
 pub type RepoStateInitializationError = repo::StateInitializationError;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -259,8 +250,8 @@ impl LocalFilePath {
         Ok(LocalFilePath(path.to_path("")))
     }
 
-    pub(crate) fn to_internal(&self) -> local::FilePath {
-        local::FilePath::create_from_public(self)
+    pub(crate) fn to_internal(&self) -> file::local::FilePath {
+        file::local::FilePath::create_from_public(self)
     }
 }
 
@@ -285,8 +276,8 @@ where
 // note that we dont have any From<&Path> implementation because we need to verify the path more
 // hence why we implement our own from function
 
-impl From<local::FilePath> for LocalFilePath {
-    fn from(value: local::FilePath) -> Self {
+impl From<file::local::FilePath> for LocalFilePath {
+    fn from(value: file::local::FilePath) -> Self {
         LocalFilePath(value.into())
     }
 }
@@ -314,32 +305,6 @@ impl std::fmt::Display for LocalFilePath {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct RepoFilePath {
-    pub path_in_set: PathBuf,
-    pub local_path: PathBuf,
-}
-
-impl From<repo::FilePath> for RepoFilePath {
-    fn from(value: repo::FilePath) -> Self {
-        RepoFilePath {
-            path_in_set: value.path_in_set.to_path(""),
-            local_path: value.local_path.into(),
-        }
-    }
-}
-
-impl TryFrom<RepoFilePath> for repo::FilePath {
-    type Error = relative_path::FromPathError;
-
-    fn try_from(value: RepoFilePath) -> Result<Self, Self::Error> {
-        Ok(repo::FilePath {
-            path_in_set: RelativePathBuf::from_path(&value.path_in_set)?,
-            local_path: value.local_path.try_into()?,
-        })
-    }
-}
-
 // not actually sure this is the best way, but it probably works
 // and we can just test on windows if we ever support it
 // test coverage also theoretically ensures we keep this list up to date
@@ -355,51 +320,6 @@ static MONJA_SPECIAL_FILES: LazyLock<HashSet<OsString>> = LazyLock::new(|| {
 pub fn is_monja_special_file(path: &Path) -> bool {
     path.file_name()
         .is_some_and(|f: &OsStr| MONJA_SPECIAL_FILES.contains(f))
-}
-
-// want to keep local/repo::File internal, so gonna bite the bullet on allocating another vector.
-// this is mainly to avoid exporting RelativePath(Buf).
-pub(crate) fn convert_set_localfile_result(
-    // we use these sets to keep the ordering nice
-    set_names: &[SetName],
-    mut source: HashMap<repo::SetName, Vec<local::FilePath>>,
-    location: &local::FilePath,
-) -> Vec<(repo::SetName, Vec<LocalFilePath>)> {
-    let mut result = Vec::with_capacity(source.len());
-
-    result.extend(
-        set_names
-            .iter()
-            .filter_map(|name| source.remove_entry(name))
-            .map(|(name, set)| {
-                (
-                    name,
-                    set.into_iter()
-                        .filter(|p: &local::FilePath| p.is_child_of(location))
-                        .map(|p| p.into())
-                        .collect(),
-                )
-            }),
-    );
-
-    result
-}
-
-pub(crate) fn convert_set_repofile_result(
-    // we use these sets to keep the ordering nice
-    set_names: &[SetName],
-    mut source: HashMap<repo::SetName, Vec<repo::FilePath>>,
-) -> Vec<(repo::SetName, Vec<RepoFilePath>)> {
-    let mut result = Vec::with_capacity(source.len());
-
-    result.extend(
-        set_names
-            .iter()
-            .filter_map(|name| source.remove_entry(name))
-            .map(|(name, set)| (name, set.into_iter().map(|p| p.into()).collect())),
-    );
-
-    result
 }
 
 // unit testing because we wouldn't otherwise get coverage on LocalFilePath without e2e tests

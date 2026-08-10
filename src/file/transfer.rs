@@ -3,9 +3,11 @@ use std::{fs, path::PathBuf};
 use thiserror::Error;
 
 use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile, local,
+    ExecutionOptions, LocalFilePath, MonjaProfile,
     repo::{self, SetPathError},
 };
+
+use super::local;
 
 #[derive(Error, Debug)]
 pub enum TransferError {

@@ -93,7 +93,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
 
     // any files placed in the set here (like .monjaignore) need to be pulled
     // we don't write directly to the local dir because we want them to be in the index
-    crate::operation::pull::pull(&profile, opts)?;
+    crate::file::pull::pull(&profile, opts)?;
 
     Ok(InitSuccess {
         profile: Some(profile),
@@ -132,7 +132,7 @@ const README: &str = indoc! {"
     1. Install monja
     2. Clone this repo. The default path is `$XDG_DATA_HOME/monja/repo`, but anywhere works.
     3. Create a profile (see below)
-    4. Run `monja pull`. Keep in mind this can overwrite existing files.
+    4. Run `monja file pull`. Keep in mind this can overwrite existing files.
 
     ### Profiles
     A profile mainly specifies the set of directories found at the root of this repo (called sets).

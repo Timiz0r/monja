@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, MonjaProfileConfig,
-    MonjaProfileConfigError, SetName, operation, repo,
+    MonjaProfileConfigError, SetName, file, repo,
 };
 
 #[derive(Error, Debug)]
@@ -19,7 +19,7 @@ pub enum NewSetError {
     SetShortcut(SetName, PathBuf, repo::SetConfigError),
 
     #[error("The put operation to place files in the new set failed.")]
-    PutFiles(#[from] operation::put::PutError),
+    PutFiles(#[from] file::put::PutError),
 }
 
 #[derive(Debug)]
@@ -59,7 +59,7 @@ pub fn new_set(
 
     // note that this wouldn't work in a dry run because the set isn't created, causing put to fail
     let put_result =
-        operation::put::put(profile, opts, files, new_set).map_err(|e| Box::new(e.into()))?;
+        file::put::put(profile, opts, files, new_set).map_err(|e| Box::new(e.into()))?;
 
     Ok(NewSetSuccess {
         new_set: put_result.owning_set,

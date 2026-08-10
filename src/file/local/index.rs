@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{MonjaProfile, local, repo};
+use crate::{MonjaProfile, file::local, repo};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct FileIndex {

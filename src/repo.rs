@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use crate::{AbsolutePath, MonjaProfile, local};
+use crate::{AbsolutePath, MonjaProfile, file::local};
 
 pub(crate) struct RepoState {
     pub sets: HashMap<SetName, Set>,

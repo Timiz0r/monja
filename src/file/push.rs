@@ -1,9 +1,8 @@
 use thiserror::Error;
 
-use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile, convert_set_localfile_result, local, repo,
-    rsync::rsync,
-};
+use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, repo};
+
+use super::{convert_set_localfile_result, local, rsync::rsync};
 
 #[derive(Error, Debug)]
 pub enum PushError {
