@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName, repo};
+use crate::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName, set};
 
-use super::{RepoFilePath, convert_set_repofile_result, local, rsync::rsync};
+use super::{RepoFilePath, convert_set_repofile_result, local, repo, rsync::rsync};
 
 #[derive(Error, Debug)]
 pub enum PullError {
@@ -12,7 +12,7 @@ pub enum PullError {
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Sets needed by the profile are missing from the repo.")]
-    MissingSets(Vec<repo::SetName>),
+    MissingSets(Vec<set::SetName>),
 
     #[error("Failed to copy files via rsync.")]
     Rsync(#[source] std::io::Error),
@@ -138,6 +138,6 @@ pub fn pull(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PullSucce
     // instead, we just move out the rest of the set info we need, at the cost of a small hashmap.
     struct SetInfo {
         root: AbsolutePath,
-        shortcut: repo::SetShortcut,
+        shortcut: set::SetShortcut,
     }
 }

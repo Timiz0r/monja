@@ -1,6 +1,8 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::{LocalFilePath, MonjaProfile, repo};
+use crate::{LocalFilePath, MonjaProfile, set};
+
+use super::repo;
 
 use ignore::WalkBuilder;
 use relative_path::{RelativePath, RelativePathBuf};
@@ -11,9 +13,9 @@ mod index;
 pub(crate) use index::*;
 
 pub(crate) struct LocalState {
-    pub files_to_push: HashMap<repo::SetName, Vec<FilePath>>,
-    pub files_with_missing_sets: HashMap<repo::SetName, Vec<FilePath>>,
-    pub missing_files: HashMap<repo::SetName, Vec<FilePath>>,
+    pub files_to_push: HashMap<set::SetName, Vec<FilePath>>,
+    pub files_with_missing_sets: HashMap<set::SetName, Vec<FilePath>>,
+    pub missing_files: HashMap<set::SetName, Vec<FilePath>>,
     pub untracked_files: Vec<FilePath>,
     // note that these same files may be in untracked_files.
     pub old_files_since_last_pull: Vec<FilePath>,
@@ -89,7 +91,7 @@ impl FilePath {
         FilePath(RelativePathBuf::new())
     }
 
-    pub(crate) fn for_set(shortcut: &repo::SetShortcut, path_in_set: &RelativePath) -> FilePath {
+    pub(crate) fn for_set(shortcut: &set::SetShortcut, path_in_set: &RelativePath) -> FilePath {
         let mut path = RelativePathBuf::new();
         path.push(shortcut);
         path.push(path_in_set);

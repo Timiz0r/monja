@@ -40,6 +40,9 @@ as per above, to avoid time wastage.
 ## Features on the todo list
 * Packages
   * Key feature. Support any package manager.
+  * Declaring packages on a set (`packages = [...]` in `.monja-set.toml`) and merging them
+    across a profile's targeted sets (`monja package add/remove/list`) is done.
+    Actually dispatching to a package manager (`monja package install`) is still stubbed out.
 * Git hook to warn against `git pull`ing when a `monja push` hasn't been done recently.
   * Key feature
 * Handling the case where a `monja pull` fails midway between rsync and saving file index.
@@ -75,7 +78,10 @@ The publicly exposed code found in `monja` are the driver ports
 (concrete types/functions that call into the application).
 Each major operation, or sets of operations, are in their own module.
 File-management operations (`push`, `pull`, `clean`, `put`, `transfer`, `set_shortcut`, `status`) live together
-under `monja::file`.
+under `monja::files`. Package operations (`add`, `remove`, `list`, `install`) live together under
+`monja::packages`, following the same shape -- merging across a profile's targeted sets is
+simpler for packages than files, since a package is just a name with no per-item content to have
+the latest set win over.
 
 Integration tests and the main function are the driver adapters that drive these ports.
 

@@ -195,6 +195,7 @@ fn shortcut() -> Result<()> {
     .configure_set(SetName("set1".into()), |_| SetConfig {
         // start with nested directory structure just in case
         shortcut: Some("foo/bar".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",
@@ -232,6 +233,7 @@ fn path_outside_of_shortcut() -> Result<()> {
     .configure_set(SetName("set1".into()), |_| SetConfig {
         // start with nested directory structure just in case
         shortcut: Some("foo/bar".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",

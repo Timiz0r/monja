@@ -1,0 +1,315 @@
+use googletest::prelude::*;
+use monja::{MonjaProfileConfig, SetConfig, SetName};
+
+use crate::sim::{Simulator, set_names};
+
+#[allow(dead_code)]
+#[macro_use]
+mod sim;
+
+#[gtest]
+fn add_new_and_already_present() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["myset"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "myset",
+        file "placeholder" "x"
+    };
+
+    let result = monja::add(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("myset".into()),
+        vec!["git".into(), "neovim".into()],
+    )?;
+
+    expect_that!(
+        result.added,
+        unordered_elements_are![eq("git"), eq("neovim")]
+    );
+    expect_that!(result.already_present, is_empty());
+
+    let result = monja::add(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("myset".into()),
+        vec!["git".into(), "ripgrep".into()],
+    )?;
+
+    expect_that!(result.added, unordered_elements_are![eq("ripgrep")]);
+    expect_that!(result.already_present, unordered_elements_are![eq("git")]);
+
+    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    expect_that!(
+        config.packages,
+        unordered_elements_are![eq("git"), eq("neovim"), eq("ripgrep")]
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn add_set_not_found() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["myset"]),
+        ..old
+    });
+
+    let result = monja::add(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("nonexistent".into()),
+        vec!["git".into()],
+    );
+
+    expect_that!(result, err(anything()));
+
+    Ok(())
+}
+
+#[gtest]
+fn add_dry_run() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["myset"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "myset",
+        file "placeholder" "x"
+    };
+
+    sim.dryrun(true);
+    let result = monja::add(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("myset".into()),
+        vec!["git".into()],
+    )?;
+
+    expect_that!(result.added, unordered_elements_are![eq("git")]);
+
+    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    expect_that!(config.packages, is_empty());
+
+    Ok(())
+}
+
+#[gtest]
+fn remove_present_and_not_present() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["myset"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "myset",
+        file "placeholder" "x"
+    };
+    sim.configure_set(SetName("myset".into()), |old| SetConfig {
+        packages: vec!["git".into(), "neovim".into()],
+        ..old
+    });
+
+    let result = monja::remove(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("myset".into()),
+        vec!["git".into(), "doesnotexist".into()],
+    )?;
+
+    expect_that!(result.removed, unordered_elements_are![eq("git")]);
+    expect_that!(
+        result.not_present,
+        unordered_elements_are![eq("doesnotexist")]
+    );
+
+    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    expect_that!(config.packages, unordered_elements_are![eq("neovim")]);
+
+    Ok(())
+}
+
+#[gtest]
+fn remove_dry_run() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["myset"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "myset",
+        file "placeholder" "x"
+    };
+    sim.configure_set(SetName("myset".into()), |old| SetConfig {
+        packages: vec!["git".into()],
+        ..old
+    });
+
+    sim.dryrun(true);
+    let result = monja::remove(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("myset".into()),
+        vec!["git".into()],
+    )?;
+
+    expect_that!(result.removed, unordered_elements_are![eq("git")]);
+
+    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    expect_that!(config.packages, unordered_elements_are![eq("git")]);
+
+    Ok(())
+}
+
+#[gtest]
+fn remove_set_not_found() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["myset"]),
+        ..old
+    });
+
+    let result = monja::remove(
+        &sim.profile()?,
+        sim.execution_options(),
+        SetName("nonexistent".into()),
+        vec!["git".into()],
+    );
+
+    expect_that!(result, err(anything()));
+
+    Ok(())
+}
+
+#[gtest]
+fn list_merges_across_sets() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1", "set2"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "set1", file "placeholder" "x" };
+    fs_operation! { SetManipulation, sim, "set2", file "placeholder" "x" };
+    sim.configure_set(SetName("set1".into()), |old| SetConfig {
+        packages: vec!["git".into(), "neovim".into()],
+        ..old
+    });
+    sim.configure_set(SetName("set2".into()), |old| SetConfig {
+        packages: vec!["neovim".into(), "ripgrep".into()],
+        ..old
+    });
+
+    let result = monja::list(&sim.profile()?)?;
+
+    expect_that!(
+        result.by_set,
+        elements_are![
+            (
+                pat!(SetName("set1")),
+                unordered_elements_are![eq("git"), eq("neovim")]
+            ),
+            (
+                pat!(SetName("set2")),
+                unordered_elements_are![eq("neovim"), eq("ripgrep")]
+            ),
+        ]
+    );
+    expect_that!(
+        result.merged,
+        elements_are![eq("git"), eq("neovim"), eq("ripgrep")]
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn list_errors_on_missing_target_set() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1", "set2"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "set1", file "placeholder" "x" };
+    sim.configure_set(SetName("set1".into()), |old| SetConfig {
+        packages: vec!["git".into()],
+        ..old
+    });
+    // set2 is never created in the repo
+
+    let result = monja::list(&sim.profile()?);
+
+    expect_that!(
+        result,
+        err(pat!(monja::ListError::MissingSets(elements_are![pat!(
+            SetName("set2")
+        )])))
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn install_returns_merged_list() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "set1", file "placeholder" "x" };
+    sim.configure_set(SetName("set1".into()), |old| SetConfig {
+        packages: vec!["git".into(), "neovim".into()],
+        ..old
+    });
+
+    let result = monja::install(&sim.profile()?, sim.execution_options())?;
+    expect_that!(result.packages, elements_are![eq("git"), eq("neovim")]);
+
+    Ok(())
+}
+
+#[gtest]
+fn install_errors_on_missing_target_set() -> Result<()> {
+    let sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1", "set2"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "set1", file "placeholder" "x" };
+    sim.configure_set(SetName("set1".into()), |old| SetConfig {
+        packages: vec!["git".into()],
+        ..old
+    });
+    // set2 is never created in the repo
+
+    let result = monja::install(&sim.profile()?, sim.execution_options());
+
+    expect_that!(
+        result,
+        err(pat!(monja::InstallError::MissingSets(elements_are![pat!(
+            SetName("set2")
+        )])))
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn install_dry_run() -> Result<()> {
+    let mut sim = Simulator::create();
+    sim.configure_profile(|old| MonjaProfileConfig {
+        target_sets: set_names(["set1"]),
+        ..old
+    });
+    fs_operation! { SetManipulation, sim, "set1", file "placeholder" "x" };
+    sim.configure_set(SetName("set1".into()), |old| SetConfig {
+        packages: vec!["git".into()],
+        ..old
+    });
+
+    sim.dryrun(true);
+    let result = monja::install(&sim.profile()?, sim.execution_options())?;
+    expect_that!(result.packages, elements_are![eq("git")]);
+
+    Ok(())
+}

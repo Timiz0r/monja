@@ -15,21 +15,22 @@ use relative_path::{PathExt, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub mod file;
-pub(crate) mod repo;
+pub mod files;
+pub mod packages;
+pub(crate) mod set;
 
 pub mod init;
 pub mod new_set;
 
 pub use crate::{
-    file::RepoFilePath, file::clean::*, file::pull::*, file::push::*, file::put::*,
-    file::set_shortcut::*, file::status::*, file::transfer::*, init::*, new_set::*,
-    repo::SetConfig, repo::SetConfigError, repo::SetCreationError, repo::SetName,
-    repo::SetShortcutError,
+    files::RepoFilePath, files::clean::*, files::pull::*, files::push::*, files::put::*,
+    files::set_shortcut::*, files::status::*, files::transfer::*, init::*, new_set::*,
+    packages::add::*, packages::install::*, packages::list::*, packages::remove::*, set::SetConfig,
+    set::SetConfigError, set::SetCreationError, set::SetName, set::SetShortcutError,
 };
 
-pub type LocalStateInitializationError = file::local::StateInitializationError;
-pub type RepoStateInitializationError = repo::StateInitializationError;
+pub type LocalStateInitializationError = files::local::StateInitializationError;
+pub type RepoStateInitializationError = files::repo::StateInitializationError;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -250,8 +251,8 @@ impl LocalFilePath {
         Ok(LocalFilePath(path.to_path("")))
     }
 
-    pub(crate) fn to_internal(&self) -> file::local::FilePath {
-        file::local::FilePath::create_from_public(self)
+    pub(crate) fn to_internal(&self) -> files::local::FilePath {
+        files::local::FilePath::create_from_public(self)
     }
 }
 
@@ -276,8 +277,8 @@ where
 // note that we dont have any From<&Path> implementation because we need to verify the path more
 // hence why we implement our own from function
 
-impl From<file::local::FilePath> for LocalFilePath {
-    fn from(value: file::local::FilePath) -> Self {
+impl From<files::local::FilePath> for LocalFilePath {
+    fn from(value: files::local::FilePath) -> Self {
         LocalFilePath(value.into())
     }
 }

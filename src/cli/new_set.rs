@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Args;
 use monja::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName};
 
-use crate::cli::file::{read_paths_from_stdin, read_paths_interactively, to_local_paths};
+use crate::cli::files::{read_paths_from_stdin, read_paths_interactively, to_local_paths};
 
 #[derive(Args)]
 pub struct NewSetCommand {

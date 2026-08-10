@@ -184,6 +184,7 @@ fn dest_shortcut_incompatible() -> Result<()> {
     })
     .configure_set(SetName("set2".into()), |_| SetConfig {
         shortcut: Some("other/prefix".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",
@@ -256,9 +257,11 @@ fn move_with_shortcut() -> Result<()> {
     })
     .configure_set(SetName("set1".into()), |_| SetConfig {
         shortcut: Some("foo/bar".into()),
+        ..Default::default()
     })
     .configure_set(SetName("set2".into()), |_| SetConfig {
         shortcut: Some("foo/bar".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",

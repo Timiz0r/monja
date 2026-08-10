@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, MonjaProfileConfig,
-    MonjaProfileConfigError, SetName, file, repo,
+    MonjaProfileConfigError, SetName, files, set,
 };
 
 #[derive(Error, Debug)]
@@ -13,13 +13,13 @@ pub enum NewSetError {
     ProfileModification(SetName, #[source] MonjaProfileConfigError),
 
     #[error("Failed to create new set.")]
-    SetCreation(#[from] repo::SetCreationError),
+    SetCreation(#[from] set::SetCreationError),
 
     #[error("Failed to configure the set's shortcut.")]
-    SetShortcut(SetName, PathBuf, repo::SetConfigError),
+    SetShortcut(SetName, PathBuf, set::SetConfigError),
 
     #[error("The put operation to place files in the new set failed.")]
-    PutFiles(#[from] file::put::PutError),
+    PutFiles(#[from] files::put::PutError),
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ pub fn new_set(
         return Ok(NewSetSuccess { new_set, files });
     }
 
-    repo::create_empty_set(profile, &new_set).map_err(|e| Box::new(e.into()))?;
+    set::create_empty_set(profile, &new_set).map_err(|e| Box::new(e.into()))?;
 
     let mut profile_config = MonjaProfileConfig::load(profile_config_path)
         .map_err(|e| NewSetError::ProfileModification(new_set.clone(), e))?;
@@ -50,7 +50,7 @@ pub fn new_set(
         .map_err(|e| NewSetError::ProfileModification(new_set.clone(), e))?;
 
     let shortcut = compute_shortcut(&files);
-    let mut set_config = repo::SetConfig::load(profile, &new_set)
+    let mut set_config = set::SetConfig::load(profile, &new_set)
         .map_err(|e| NewSetError::SetShortcut(new_set.clone(), shortcut.clone(), e))?;
     set_config.shortcut = Some(shortcut.clone());
     set_config
@@ -59,7 +59,7 @@ pub fn new_set(
 
     // note that this wouldn't work in a dry run because the set isn't created, causing put to fail
     let put_result =
-        file::put::put(profile, opts, files, new_set).map_err(|e| Box::new(e.into()))?;
+        files::put::put(profile, opts, files, new_set).map_err(|e| Box::new(e.into()))?;
 
     Ok(NewSetSuccess {
         new_set: put_result.owning_set,

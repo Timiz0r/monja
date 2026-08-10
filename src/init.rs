@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
-    PullError, SetName, repo,
+    PullError, SetName, set,
 };
 
 #[derive(Error, Debug)]
@@ -17,7 +17,7 @@ pub enum InitError {
     Profile(#[source] std::io::Error),
 
     #[error("Failed to create set.")]
-    Set(#[from] repo::SetCreationError),
+    Set(#[from] set::SetCreationError),
 
     #[error("Failed to create .monjaignore.")]
     IgnoreFile(#[source] std::io::Error),
@@ -80,7 +80,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     let profile = MonjaProfile::from_config(profile, spec.local_root, spec.data_root)
         .map_err(MonjaProfileConfigError::Load)?;
 
-    let set_path = repo::create_empty_set(&profile, &SetName(spec.initial_set_name))?;
+    let set_path = set::create_empty_set(&profile, &SetName(spec.initial_set_name))?;
 
     // goes before creating profile for move reasons
     let ignorefile = set_path.join(".monjaignore");
@@ -93,7 +93,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
 
     // any files placed in the set here (like .monjaignore) need to be pulled
     // we don't write directly to the local dir because we want them to be in the index
-    crate::file::pull::pull(&profile, opts)?;
+    crate::files::pull::pull(&profile, opts)?;
 
     Ok(InitSuccess {
         profile: Some(profile),

@@ -25,6 +25,7 @@ fn basic_change() -> Result<()> {
     };
     sim.configure_set(SetName("myset".into()), |_| SetConfig {
         shortcut: Some(".config".into()),
+        ..Default::default()
     });
 
     let _pull = monja::pull(&sim.profile()?, sim.execution_options())?;
@@ -69,6 +70,7 @@ fn widen_shortcut() -> Result<()> {
     };
     sim.configure_set(SetName("myset".into()), |_| SetConfig {
         shortcut: Some(".config/foo".into()),
+        ..Default::default()
     });
 
     let _pull = monja::pull(&sim.profile()?, sim.execution_options())?;
@@ -103,6 +105,7 @@ fn remove_shortcut() -> Result<()> {
     };
     sim.configure_set(SetName("myset".into()), |_| SetConfig {
         shortcut: Some(".config".into()),
+        ..Default::default()
     });
 
     let _pull = monja::pull(&sim.profile()?, sim.execution_options())?;
@@ -209,6 +212,7 @@ fn dryrun() -> Result<()> {
     };
     sim.configure_set(SetName("myset".into()), |_| SetConfig {
         shortcut: Some(".config".into()),
+        ..Default::default()
     });
 
     let _pull = monja::pull(&sim.profile()?, sim.execution_options())?;
@@ -249,6 +253,7 @@ fn same_shortcut_noop() -> Result<()> {
     };
     sim.configure_set(SetName("myset".into()), |_| SetConfig {
         shortcut: Some(".config".into()),
+        ..Default::default()
     });
 
     let _pull = monja::pull(&sim.profile()?, sim.execution_options())?;

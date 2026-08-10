@@ -2,7 +2,9 @@ use std::{fs, path::PathBuf};
 
 use thiserror::Error;
 
-use crate::{ExecutionOptions, MonjaProfile, repo};
+use crate::{ExecutionOptions, MonjaProfile, set};
+
+use super::repo;
 
 #[derive(Error, Debug)]
 pub enum SetShortcutError {
@@ -10,10 +12,10 @@ pub enum SetShortcutError {
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Set not found in repo.")]
-    SetNotFound(repo::SetName),
+    SetNotFound(set::SetName),
 
     #[error("New shortcut is invalid.")]
-    InvalidShortcut(#[from] repo::SetShortcutError),
+    InvalidShortcut(#[from] set::SetShortcutError),
 
     #[error(
         "File '{local_path}' would fall outside of the new shortcut '{new_shortcut}' (currently at '{current_path_in_set}' in set)"
@@ -36,7 +38,7 @@ pub enum SetShortcutError {
     },
 
     #[error("Failed to save set config.")]
-    SaveConfig(#[from] repo::SetConfigError),
+    SaveConfig(#[from] set::SetConfigError),
 
     #[error("Failed to clean up empty directories.")]
     Cleanup(PathBuf, #[source] walkdir::Error),
@@ -44,7 +46,7 @@ pub enum SetShortcutError {
 
 #[derive(Debug)]
 pub struct SetShortcutSuccess {
-    pub set_name: repo::SetName,
+    pub set_name: set::SetName,
     pub old_shortcut: PathBuf,
     pub new_shortcut: PathBuf,
     pub files_moved: Vec<PathBuf>,
@@ -55,10 +57,10 @@ pub struct SetShortcutSuccess {
 pub fn set_shortcut(
     profile: &MonjaProfile,
     opts: &ExecutionOptions,
-    set_name: repo::SetName,
+    set_name: set::SetName,
     new_shortcut: PathBuf,
 ) -> Result<SetShortcutSuccess, SetShortcutError> {
-    let new_shortcut = repo::SetShortcut::from_path(new_shortcut)?;
+    let new_shortcut = set::SetShortcut::from_path(new_shortcut)?;
 
     let repo =
         repo::initialize_full_state(profile).map_err(SetShortcutError::RepoStateInitialization)?;
@@ -118,7 +120,7 @@ pub fn set_shortcut(
 
     cleanup_empty_dirs(&set.root)?;
 
-    let mut config = repo::SetConfig::load(profile, &set_name)?;
+    let mut config = set::SetConfig::load(profile, &set_name)?;
     config.shortcut = if new_shortcut_path.as_os_str().is_empty() {
         None
     } else {

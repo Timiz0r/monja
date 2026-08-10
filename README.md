@@ -101,3 +101,22 @@ and any file not in the repo (but local) will be removed.
 The clean command will list the files to be cleaned and ask for confirmation.
 You can also use the `--dryrun` flag to see the output of operations like `monja file clean`
 without actually performing them.
+
+### Packages
+In addition to files, a set can declare a list of packages it wants -- just plain package names,
+with no version pinning or other metadata. Like files, a package declared by any of a profile's
+targeted sets is part of that profile's effective package list. Unlike files, there's no
+per-package "content" to have the latest set win over, so merging across sets is just a
+deduplicated union.
+
+Add packages to a set with `monja package add --set <set> <names...>`,
+and remove them with `monja package remove --set <set> <names...>`.
+These edit the `packages` list in that set's `.monja-set.toml` directly --
+there's no local reflection of a package to push/pull the way there is for files.
+
+`monja package list` shows the packages declared by each of the profile's targeted sets,
+as well as the merged (effective) list.
+
+`monja package install` is meant to install the merged (effective) package list using the local
+machine's package manager. **This isn't implemented yet** -- it currently only reports what would
+be installed.

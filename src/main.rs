@@ -11,8 +11,8 @@ mod cli;
 mod completions;
 
 use cli::{
-    file::FileArgs, init::InitCommand, new_set::NewSetCommand, profile::ProfileCommand,
-    repo_dir::RepoDirCommand,
+    files::FileArgs, init::InitCommand, new_set::NewSetCommand, packages::PackageArgs,
+    profile::ProfileCommand, repo_dir::RepoDirCommand,
 };
 
 #[derive(Parser)]
@@ -39,6 +39,9 @@ enum Commands {
     /// File management commands: push, pull, clean, put, transfer, setshortcut, status.
     File(FileArgs),
 
+    /// Package management commands: add, remove, list, install.
+    Package(PackageArgs),
+
     /// Creates a new set, with specified files, and adds it to the end of the profile.
     ///
     /// Note that this command ignores `.monjaignore` files.
@@ -61,6 +64,7 @@ impl Commands {
                 panic!("Init command should have a separate invocation path.")
             }
             Commands::File(command) => command.execute(profile, opts),
+            Commands::Package(command) => command.execute(profile, opts),
             Commands::NewSet(command) => command.execute(profile, opts),
             Commands::RepoDir(command) => command.execute(profile, opts),
             Commands::Profile(command) => command.execute(profile, opts),

@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, repo};
+use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, set};
 
-use super::{convert_set_localfile_result, local, rsync::rsync};
+use super::{convert_set_localfile_result, local, repo, rsync::rsync};
 
 #[derive(Error, Debug)]
 pub enum PushError {
@@ -14,8 +14,8 @@ pub enum PushError {
 
     #[error("The local index and repo were found to be out of sync.")]
     Consistency {
-        files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-        missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+        files_with_missing_sets: Vec<(set::SetName, Vec<LocalFilePath>)>,
+        missing_files: Vec<(set::SetName, Vec<LocalFilePath>)>,
     },
 
     #[error("Failed to copy files via rsync.")]
@@ -24,7 +24,7 @@ pub enum PushError {
 
 #[derive(Debug)]
 pub struct PushSuccess {
-    pub files_pushed: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub files_pushed: Vec<(set::SetName, Vec<LocalFilePath>)>,
 }
 
 pub fn push(profile: &MonjaProfile, opts: &ExecutionOptions) -> Result<PushSuccess, PushError> {

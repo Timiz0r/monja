@@ -2,9 +2,10 @@ use std::fs;
 
 use thiserror::Error;
 
-use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, repo};
+use crate::{ExecutionOptions, LocalFilePath, MonjaProfile};
 
 use super::local::{self, FileIndexError};
+use super::repo;
 
 #[derive(Error, Debug)]
 pub enum CleanError {

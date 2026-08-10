@@ -6,12 +6,10 @@ use std::{
 
 use thiserror::Error;
 
-use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile, SetName,
-    repo::{self, SetPathError},
-};
+use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, SetName, set};
 
 use super::local;
+use super::repo::{self, SetPathError};
 
 #[derive(Error, Debug)]
 pub enum PutError {
@@ -19,14 +17,14 @@ pub enum PutError {
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Set not found in repo.")]
-    SetNotFound(repo::SetName),
+    SetNotFound(set::SetName),
 
     #[error("Failed to load monja-index.toml.")]
     FileIndex(#[from] local::FileIndexError),
 
     #[error("Failed to copy local file to repo.")]
     CopyToSet {
-        set_name: repo::SetName,
+        set_name: set::SetName,
         local_path: PathBuf,
         repo_path: PathBuf,
         #[source]
@@ -45,11 +43,11 @@ pub enum PutError {
 
 #[derive(Debug)]
 pub struct PutSuccess {
-    pub owning_set: repo::SetName,
+    pub owning_set: set::SetName,
     pub files: Vec<LocalFilePath>,
 
     pub set_is_targeted: bool,
-    pub files_in_later_sets: Vec<(LocalFilePath, Vec<repo::SetName>)>,
+    pub files_in_later_sets: Vec<(LocalFilePath, Vec<set::SetName>)>,
     pub untracked_files: Vec<LocalFilePath>,
 }
 
@@ -57,7 +55,7 @@ pub fn put(
     profile: &MonjaProfile,
     opts: &ExecutionOptions,
     files: Vec<LocalFilePath>,
-    owning_set: repo::SetName,
+    owning_set: set::SetName,
 ) -> Result<PutSuccess, PutError> {
     let repo = repo::initialize_full_state(profile).map_err(PutError::RepoStateInitialization)?;
     let mut index = local::FileIndex::load(profile, local::IndexKind::Current)?;

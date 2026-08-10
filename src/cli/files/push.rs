@@ -69,7 +69,9 @@ impl PushCommand {
                     "Then, use `monja file push` to push these and the rest of the files to the right set."
                 );
 
-                eprintln!("\t* Manually merge local changes into the repo, then `monja file pull`.");
+                eprintln!(
+                    "\t* Manually merge local changes into the repo, then `monja file pull`."
+                );
             }
 
             // probably something better to use, but we don't want to double log with the below `result?`.

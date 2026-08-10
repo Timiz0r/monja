@@ -1,8 +1,8 @@
 use thiserror::Error;
 
-use crate::{LocalFilePath, MonjaProfile, repo};
+use crate::{LocalFilePath, MonjaProfile, set};
 
-use super::{convert_set_localfile_result, local};
+use super::{convert_set_localfile_result, local, repo};
 
 #[derive(Error, Debug)]
 pub enum StatusError {
@@ -18,9 +18,9 @@ pub enum StatusError {
 
 #[derive(Debug)]
 pub struct Status {
-    pub files_to_push: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-    pub files_with_missing_sets: Vec<(repo::SetName, Vec<LocalFilePath>)>,
-    pub missing_files: Vec<(repo::SetName, Vec<LocalFilePath>)>,
+    pub files_to_push: Vec<(set::SetName, Vec<LocalFilePath>)>,
+    pub files_with_missing_sets: Vec<(set::SetName, Vec<LocalFilePath>)>,
+    pub missing_files: Vec<(set::SetName, Vec<LocalFilePath>)>,
     pub untracked_files: Vec<LocalFilePath>,
     pub old_files_after_last_pull: Vec<LocalFilePath>,
 }

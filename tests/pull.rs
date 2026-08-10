@@ -137,12 +137,15 @@ fn shortcuts() -> Result<()> {
     .configure_set(SetName("set1".into()), |_| SetConfig {
         // start with nested directory structure just in case
         shortcut: Some(".config/myconfig".into()),
+        ..Default::default()
     })
     .configure_set(SetName("set2".into()), |_| SetConfig {
         shortcut: Some(".config".into()),
+        ..Default::default()
     })
     .configure_set(SetName("set3".into()), |_| SetConfig {
         shortcut: Some("".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",
@@ -189,6 +192,7 @@ fn shorcut_directory_traversal() -> Result<()> {
     })
     .configure_set(SetName("set1".into()), |_| SetConfig {
         shortcut: Some("..".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",
@@ -215,6 +219,7 @@ fn shorcut_absolute_path() -> Result<()> {
     })
     .configure_set(SetName("set1".into()), |_| SetConfig {
         shortcut: Some("/".into()),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "set1",

@@ -8,12 +8,12 @@ use std::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{MonjaProfile, file::local, repo};
+use crate::{MonjaProfile, files::local, set};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct FileIndex {
     #[serde(flatten)]
-    set_mapping: HashMap<local::FilePath, repo::SetName>,
+    set_mapping: HashMap<local::FilePath, set::SetName>,
 }
 
 impl FileIndex {
@@ -58,11 +58,11 @@ impl FileIndex {
         self.set_mapping.contains_key(local_file)
     }
 
-    pub(crate) fn take(&mut self, local_file: &local::FilePath) -> Option<repo::SetName> {
+    pub(crate) fn take(&mut self, local_file: &local::FilePath) -> Option<set::SetName> {
         self.set_mapping.remove(local_file)
     }
 
-    pub(crate) fn set(&mut self, local_file: local::FilePath, owning_set: repo::SetName) {
+    pub(crate) fn set(&mut self, local_file: local::FilePath, owning_set: set::SetName) {
         self.set_mapping.insert(local_file, owning_set);
     }
 

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::repo;
+use crate::set;
 
 pub mod clean;
 pub mod pull;
@@ -11,6 +11,7 @@ pub mod status;
 pub mod transfer;
 
 pub(crate) mod local;
+pub(crate) mod repo;
 pub(crate) mod rsync;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,14 +40,14 @@ impl TryFrom<RepoFilePath> for repo::FilePath {
     }
 }
 
-// want to keep local/repo::File internal, so gonna bite the bullet on allocating another vector.
+// want to keep local::FilePath/repo::File internal, so gonna bite the bullet on allocating another vector.
 // this is mainly to avoid exporting RelativePath(Buf).
 pub(crate) fn convert_set_localfile_result(
     // we use these sets to keep the ordering nice
-    set_names: &[repo::SetName],
-    mut source: HashMap<repo::SetName, Vec<local::FilePath>>,
+    set_names: &[set::SetName],
+    mut source: HashMap<set::SetName, Vec<local::FilePath>>,
     location: &local::FilePath,
-) -> Vec<(repo::SetName, Vec<crate::LocalFilePath>)> {
+) -> Vec<(set::SetName, Vec<crate::LocalFilePath>)> {
     let mut result = Vec::with_capacity(source.len());
 
     result.extend(
@@ -69,9 +70,9 @@ pub(crate) fn convert_set_localfile_result(
 
 pub(crate) fn convert_set_repofile_result(
     // we use these sets to keep the ordering nice
-    set_names: &[repo::SetName],
-    mut source: HashMap<repo::SetName, Vec<repo::FilePath>>,
-) -> Vec<(repo::SetName, Vec<RepoFilePath>)> {
+    set_names: &[set::SetName],
+    mut source: HashMap<set::SetName, Vec<repo::FilePath>>,
+) -> Vec<(set::SetName, Vec<RepoFilePath>)> {
     let mut result = Vec::with_capacity(source.len());
 
     result.extend(

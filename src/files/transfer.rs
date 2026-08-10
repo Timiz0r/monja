@@ -2,12 +2,10 @@ use std::{fs, path::PathBuf};
 
 use thiserror::Error;
 
-use crate::{
-    ExecutionOptions, LocalFilePath, MonjaProfile,
-    repo::{self, SetPathError},
-};
+use crate::{ExecutionOptions, LocalFilePath, MonjaProfile, set};
 
 use super::local;
+use super::repo::{self, SetPathError};
 
 #[derive(Error, Debug)]
 pub enum TransferError {
@@ -15,17 +13,17 @@ pub enum TransferError {
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Source set not found in repo.")]
-    SourceSetNotFound(repo::SetName),
+    SourceSetNotFound(set::SetName),
 
     #[error("Destination set not found in repo.")]
-    DestSetNotFound(repo::SetName),
+    DestSetNotFound(set::SetName),
 
     #[error("Failed to load monja-index.toml.")]
     FileIndex(#[from] local::FileIndexError),
 
     #[error("Failed to copy local file to destination set.")]
     CopyToDest {
-        set_name: repo::SetName,
+        set_name: set::SetName,
         local_path: PathBuf,
         repo_path: PathBuf,
         #[source]
@@ -43,7 +41,7 @@ pub enum TransferError {
 
     #[error("Failed to remove file from source set.")]
     RemoveFromSource {
-        set_name: repo::SetName,
+        set_name: set::SetName,
         repo_path: PathBuf,
         #[source]
         source: std::io::Error,
@@ -51,15 +49,15 @@ pub enum TransferError {
 
     #[error("File is not tracked by the source set.")]
     NotInSourceSet {
-        set_name: repo::SetName,
+        set_name: set::SetName,
         local_path: LocalFilePath,
     },
 }
 
 #[derive(Debug)]
 pub struct TransferSuccess {
-    pub source_set: repo::SetName,
-    pub dest_set: repo::SetName,
+    pub source_set: set::SetName,
+    pub dest_set: set::SetName,
     pub files: Vec<LocalFilePath>,
 }
 
@@ -67,8 +65,8 @@ pub fn transfer(
     profile: &MonjaProfile,
     opts: &ExecutionOptions,
     files: Vec<LocalFilePath>,
-    source_set: repo::SetName,
-    dest_set: repo::SetName,
+    source_set: set::SetName,
+    dest_set: set::SetName,
 ) -> Result<TransferSuccess, TransferError> {
     let repo =
         repo::initialize_full_state(profile).map_err(TransferError::RepoStateInitialization)?;
