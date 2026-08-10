@@ -117,6 +117,26 @@ there's no local reflection of a package to push/pull the way there is for files
 `monja package list` shows the packages declared by each of the profile's targeted sets,
 as well as the merged (effective) list.
 
-`monja package install` is meant to install the merged (effective) package list using the local
-machine's package manager. **This isn't implemented yet** -- it currently only reports what would
-be installed.
+`monja package install` installs the merged (effective) package list using the local machine's
+package manager, by running a command you configure in `monja-profile.toml`:
+
+```toml
+[packages]
+install-command = "sudo pacman -S {packages}"
+# optional; defaults to a single space
+install-delimiter = " "
+
+# optional; translates a monja package name to whatever this machine's package manager
+# actually calls it, only when building the install command (`monja package list` always
+# shows the canonical name stored in `.monja-set.toml`)
+[packages.aliases]
+neovim = "neovim-git"
+ripgrep = "rg"
+```
+
+The `{packages}` token gets replaced with the effective package list (aliases applied), joined by
+`install-delimiter`, and the whole thing is run through `sh -c`, so the command can use ordinary
+shell syntax (quoting, `&&`, `sudo`, etc.). `monja package install` prints the command before
+running it and asks for confirmation (skippable with `-y`/`--yes`, same as other commands);
+`--dry-run` builds and prints the command without running it. If no `install-command` is
+configured, `monja package install` just reports the effective package list.

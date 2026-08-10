@@ -19,15 +19,23 @@ impl InstallCommand {
 
         let result = result?;
 
-        if !result.packages.is_empty() {
-            println!(
-                "The following packages would be installed (installation is not yet implemented):"
-            );
-            for package in result.packages.iter() {
-                println!("\t{}", package);
-            }
-        } else {
+        if result.packages.is_empty() {
             println!("No packages to install.");
+            return Ok(());
+        }
+
+        println!("Packages (merged, effective list for this profile):");
+        for package in result.packages.iter() {
+            println!("\t{}", package);
+        }
+
+        match result.command {
+            Some(command) if result.executed => println!("\nRan: {}", command),
+            Some(command) => println!("\nWould run: {}", command),
+            None => println!(
+                "\nNo install command configured for this profile \
+                 (set `packages.install-command` in monja-profile.toml)."
+            ),
         }
 
         Ok(())

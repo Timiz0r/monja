@@ -1,4 +1,6 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
 
 use crate::{MonjaProfile, set};
 
@@ -8,6 +10,27 @@ pub mod list;
 pub mod remove;
 
 pub(crate) mod repo;
+
+// lives in the profile (`monja-profile.toml`), not a set's `.monja-set.toml` -- unlike a set's
+// package list, this is about how *this machine* wants to install packages, not what packages
+// are wanted.
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct Config {
+    // the merged, alias-applied package list is substituted in for the literal `{packages}`
+    // token, joined by `install_delimiter` (default: a single space).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_command: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_delimiter: Option<String>,
+
+    // monja package name -> the name this machine's package manager actually uses for it.
+    // only applied when building the install command -- `monja package list` always shows the
+    // canonical name, since that's what's stored in (and should be used to edit) `.monja-set.toml`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub aliases: HashMap<String, String>,
+}
 
 // unlike files, a package has no "content" to conflict over -- it's just a name that either
 // is or isn't wanted -- so merging targeted sets' packages is a plain deduplicated union,

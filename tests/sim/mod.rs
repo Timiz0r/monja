@@ -44,6 +44,7 @@ impl Simulator {
         let profile_config = MonjaProfileConfig {
             repo_dir: repo_dir.path().to_path_buf(),
             target_sets: Vec::new(),
+            ..Default::default()
         };
 
         let profile_path = local_dir.path().join("monja-profile.toml");

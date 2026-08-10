@@ -197,6 +197,7 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
     sim.configure_profile(|_| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         repo_dir: repo_root.to_path_buf(),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "simple",
@@ -229,6 +230,7 @@ fn missing_repo_folder_post_profile() -> Result<()> {
     sim.configure_profile(|_| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
         repo_dir: repo_root.to_path_buf(),
+        ..Default::default()
     });
 
     fs_operation! { SetManipulation, sim, "simple",

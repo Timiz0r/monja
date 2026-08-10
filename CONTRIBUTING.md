@@ -42,7 +42,9 @@ as per above, to avoid time wastage.
   * Key feature. Support any package manager.
   * Declaring packages on a set (`packages = [...]` in `.monja-set.toml`) and merging them
     across a profile's targeted sets (`monja package add/remove/list`) is done.
-    Actually dispatching to a package manager (`monja package install`) is still stubbed out.
+    `monja package install` dispatches to a package manager by running a profile-configured
+    `packages.install-command` template (with package-name aliasing and a configurable
+    delimiter) through `sh -c`; any package manager reachable via a shell command is supported.
 * Git hook to warn against `git pull`ing when a `monja push` hasn't been done recently.
   * Key feature
 * Handling the case where a `monja pull` fails midway between rsync and saving file index.

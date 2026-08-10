@@ -32,12 +32,14 @@ pub use crate::{
 pub type LocalStateInitializationError = files::local::StateInitializationError;
 pub type RepoStateInitializationError = files::repo::StateInitializationError;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MonjaProfileConfig {
     pub repo_dir: PathBuf,
     // while a hashset would be handy, we use a vec because order is important
     pub target_sets: Vec<SetName>,
+    #[serde(default)]
+    pub packages: packages::Config,
 }
 
 #[derive(Error, Debug)]
@@ -337,6 +339,7 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
+            ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -357,6 +360,7 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
+            ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -378,6 +382,7 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
+            ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -398,6 +403,7 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
+            ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
@@ -422,6 +428,7 @@ mod localfilepath_tests {
         let config = MonjaProfileConfig {
             repo_dir: "/home/foo/repo".into(),
             target_sets: Vec::new(),
+            ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
