@@ -50,10 +50,10 @@ enum Commands {
     /// Prints the repo's directory so that it can be piped into `cd`.
     RepoDir(RepoDirCommand),
 
-    /// Prints the repo's directory so that it can be piped into `cd`.
+    /// Prints the profile config's path, e.g. for use with `cat` or an editor.
     Profile(ProfileCommand),
 
-    /// Prints the repo's directory so that it can be piped into `cd`.
+    /// Generates shell completions for the current shell.
     Completions(completions::CompletionsCommand),
 }
 

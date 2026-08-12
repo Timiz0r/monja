@@ -42,7 +42,9 @@ enum PackageCommands {
 
     /// Installs the merged (effective) package list for this profile.
     ///
-    /// Installation isn't implemented yet -- this currently only reports what would be installed.
+    /// Dispatches to the local machine's package manager by running the command configured as
+    /// `packages.install-command` in `monja-profile.toml`. If no install command is configured,
+    /// this just reports the effective package list.
     Install(InstallCommand),
 }
 impl PackageCommands {

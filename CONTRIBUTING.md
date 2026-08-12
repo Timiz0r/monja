@@ -62,8 +62,6 @@ as per above, to avoid time wastage.
   * Currently has a hard dependency on `fzf`.
 * Maintain comments when (de)serializing configs
   * Presumably need custom serialization logic to store the inner structure of the config somewhere. Low pri.
-* A command to modify a set's shortcut.
-  * Aka want to use a parent dir (or no dir) for the shortcut. This requires creating new folders.
 
 The thoughts on these should eventually make it to an issue somewhere.
 

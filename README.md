@@ -26,8 +26,13 @@ using the typical methods for each tool.
 ## Installation
 For now, this isn't uploaded anywhere. To install, checkout the repo and call `cargo install --path .` from the root.
 
+### Shell completions
+`monja` supports dynamic shell completions (including set names, read live from the profile/repo) via
+[`clap_complete`](https://docs.rs/clap_complete). Source `monja completions` from your shell's startup file,
+e.g. for fish: `echo 'monja completions | source' >> ~/.config/fish/config.fish`.
+
 ## Usage
-Quick note: any of the below commands that touch files support the `--dryrun` flag
+Quick note: any of the below commands that touch files support the `--dry-run` flag
 to view operations without performing them.
 
 ### Initialization
@@ -99,8 +104,24 @@ By adding the `--full` flag, the full local state will be compared to the repo,
 and any file not in the repo (but local) will be removed.
 
 The clean command will list the files to be cleaned and ask for confirmation.
-You can also use the `--dryrun` flag to see the output of operations like `monja file clean`
+You can also use the `--dry-run` flag to see the output of operations like `monja file clean`
 without actually performing them.
+
+### Moving files between sets
+`monja file transfer --from <set> --to <set> -- <files>` moves already-tracked files from one set to another.
+Like `monja file put`, it supports `-i` and line-delimited stdin for specifying files.
+
+### Changing a set's shortcut
+If all files in a set share a common prefix, that prefix can be configured as the set's `shortcut`,
+so the set's files can be stored without repeating that prefix (this happens automatically for `monja newset`,
+as noted above). To change a set's shortcut after the fact, use `monja file setshortcut --set <set> <path>`,
+where `<path>` is the new shortcut, relative to `$HOME`. This restructures the files already in the set to match.
+
+### Checking file status
+`monja file status [location]` reports on the local files under `location` (or everywhere, if omitted):
+which are untracked, which belong to sets missing from the repo, which are missing from the sets they were pulled
+from, which are ready to be pushed, and which were removed from the repo since the last pull. Each of these
+categories can be viewed in isolation with a corresponding flag (e.g. `--untracked`); see `monja file status --help`.
 
 ### Packages
 In addition to files, a set can declare a list of packages it wants -- just plain package names,
