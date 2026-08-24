@@ -12,7 +12,7 @@ pub enum CleanError {
     #[error("Unable to initialize local state.")]
     LocalStateInitialization(#[from] local::StateInitializationError),
 
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Failed to remove file.")]

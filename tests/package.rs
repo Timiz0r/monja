@@ -41,7 +41,7 @@ fn add_new_and_already_present() -> Result<()> {
     expect_that!(result.added, unordered_elements_are![eq("ripgrep")]);
     expect_that!(result.already_present, unordered_elements_are![eq("git")]);
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(
         config.packages,
         unordered_elements_are![eq("git"), eq("neovim"), eq("ripgrep")]
@@ -91,7 +91,7 @@ fn add_dry_run() -> Result<()> {
 
     expect_that!(result.added, unordered_elements_are![eq("git")]);
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(config.packages, is_empty());
 
     Ok(())
@@ -125,7 +125,7 @@ fn remove_present_and_not_present() -> Result<()> {
         unordered_elements_are![eq("doesnotexist")]
     );
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(config.packages, unordered_elements_are![eq("neovim")]);
 
     Ok(())
@@ -156,7 +156,7 @@ fn remove_dry_run() -> Result<()> {
 
     expect_that!(result.removed, unordered_elements_are![eq("git")]);
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(config.packages, unordered_elements_are![eq("git")]);
 
     Ok(())

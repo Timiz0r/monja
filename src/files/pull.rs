@@ -8,7 +8,7 @@ use super::{RepoFilePath, convert_set_repofile_result, local, repo, rsync::rsync
 
 #[derive(Error, Debug)]
 pub enum PullError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Sets needed by the profile are missing from the repo.")]

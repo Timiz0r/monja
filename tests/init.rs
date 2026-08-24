@@ -111,6 +111,7 @@ fn init(sim: &Simulator) -> std::result::Result<InitSuccess, InitError> {
             .unwrap()
             .to_path(""),
         initial_set_name: "initialset".into(),
+        repo_name: monja::RepoName::default_name(),
     };
 
     monja::init(sim.execution_options(), spec)

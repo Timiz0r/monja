@@ -4,13 +4,11 @@ use relative_path::RelativePathBuf;
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use crate::{AbsolutePath, MonjaProfile, set};
+use crate::{AbsolutePath, MonjaProfile, RepoName, set};
 
 use super::local;
 
-pub(crate) struct RepoState {
-    pub sets: HashMap<set::SetName, Set>,
-}
+pub(crate) type RepoState = set::SetStates<Set>;
 
 impl RepoState {
     pub(crate) fn get_owning_set<'a>(
@@ -25,10 +23,15 @@ impl RepoState {
             .rev()
             .find(|name| self.sets.get(*name).is_some_and(|s| s.tracks_file(file)))
     }
+
+    pub(crate) fn get_set(&self, name: &set::SetName) -> Result<&Set, set::SetLookupError> {
+        self.get(name)
+    }
 }
 
 pub(crate) struct Set {
     pub name: set::SetName,
+    pub repo: RepoName,
     pub shortcut: set::SetShortcut,
     pub root: AbsolutePath,
     // directories: HashMap<ObjectPath, Directory>,
@@ -103,8 +106,8 @@ pub(crate) struct File {
 
 #[derive(Error, Debug)]
 pub enum StateInitializationError {
-    #[error("Unable to read the state of the repo.")]
-    ReadSetDirs(#[source] std::io::Error),
+    #[error("Unable to read the state of repo '{0}'.")]
+    ReadSetDirs(RepoName, #[source] std::io::Error),
     #[error("Unable to convert dir name into set name: {0:?}")]
     NonUtf8Path(std::ffi::OsString),
     #[error("Set shortcut is invalid.")]
@@ -113,6 +116,8 @@ pub enum StateInitializationError {
     DirectoryWalk(set::SetName, #[source] walkdir::Error),
     #[error("Unable to load set config.")]
     SetConfig(#[from] set::SetConfigError),
+    #[error("A targeted set could not be resolved to a single repo.")]
+    AmbiguousSet(#[source] set::SetLookupError),
 }
 
 // hand-written rather than `#[from]` since it flattens `DiscoverSetsError`'s variants into this
@@ -121,7 +126,9 @@ pub enum StateInitializationError {
 impl From<set::DiscoverSetsError> for StateInitializationError {
     fn from(err: set::DiscoverSetsError) -> Self {
         match err {
-            set::DiscoverSetsError::ReadSetDirs(e) => StateInitializationError::ReadSetDirs(e),
+            set::DiscoverSetsError::ReadSetDirs(repo, e) => {
+                StateInitializationError::ReadSetDirs(repo, e)
+            }
             set::DiscoverSetsError::NonUtf8Path(e) => StateInitializationError::NonUtf8Path(e),
         }
     }
@@ -130,45 +137,31 @@ impl From<set::DiscoverSetsError> for StateInitializationError {
 pub(crate) fn initialize_full_state(
     profile: &MonjaProfile,
 ) -> Result<RepoState, Vec<StateInitializationError>> {
-    let set_info = set::discover_sets(profile)
-        .map_err(|errs| errs.into_iter().map(Into::into).collect::<Vec<_>>())?;
-
-    let mut sets = HashMap::with_capacity(set_info.len());
-    let mut errors = Vec::new();
-    for (set_name, set_path) in set_info {
-        let set = load_set_state(profile, &set_name, set_path);
-        match set {
-            Ok(set) => _ = sets.insert(set_name, set),
-            Err(err) => errors.push(err),
-        };
-    }
-
-    if !errors.is_empty() {
-        return Err(errors);
-    }
-
-    Ok(RepoState { sets })
+    set::load_sets(
+        profile,
+        StateInitializationError::AmbiguousSet,
+        load_set_state,
+    )
 }
 
 fn load_set_state(
-    profile: &MonjaProfile,
     set_name: &set::SetName,
-    set_path: PathBuf,
+    location: &set::SetLocation,
 ) -> Result<Set, StateInitializationError> {
-    let set_config = set::SetConfig::load(profile, set_name)?;
+    let set_config = set::SetConfig::load(&location.root, set_name)?;
 
     let shortcut = set_config.shortcut.unwrap_or("".into());
     let shortcut = set::SetShortcut::from_path(shortcut)?;
 
-    let root = AbsolutePath::for_existing_path(&profile.repo_root.join(set_name))
-        .expect("This function gets called after reading dirs in repo root.");
+    let root = AbsolutePath::for_existing_path(&location.root)
+        .expect("This function gets called after reading dirs in repo roots.");
 
     let mut locally_mapped_files = HashMap::new();
-    for entry in WalkDir::new(&set_path) {
+    for entry in WalkDir::new(&location.root) {
         let entry =
             entry.map_err(|e| StateInitializationError::DirectoryWalk(set_name.clone(), e))?;
         if entry.file_type().is_file() && !crate::is_monja_special_file(entry.path()) {
-            let path_in_set = entry.path().strip_prefix(&set_path).expect(
+            let path_in_set = entry.path().strip_prefix(&location.root).expect(
                 "The entry path should start with set_path, since that's what we called it with.",
             );
             let path_in_set = RelativePathBuf::from_path(path_in_set)
@@ -187,6 +180,7 @@ fn load_set_state(
 
     Ok(Set {
         name: set_name.clone(),
+        repo: location.repo.clone(),
         shortcut,
         root,
         locally_mapped_files,

@@ -24,6 +24,7 @@ fn basic() -> Result<()> {
         &AbsolutePath::for_existing_path(sim.profile_path())?,
         vec![sim.local_path("notinrepo"), sim.local_path("alsonotinrepo")],
         SetName("newset".into()),
+        None,
     )?;
     expect_that!(new_set_result.new_set, pat!(SetName("newset")));
     expect_that!(new_set_result.files, { eq(Path::new("notinrepo")), eq(Path::new("alsonotinrepo")) });
@@ -68,6 +69,7 @@ fn common_prefix() -> Result<()> {
             sim.local_path("a/b/c/d/3"),
         ],
         SetName("newset".into()),
+        None,
     )?;
     expect_that!(new_set_result.new_set, pat!(SetName("newset")));
     expect_that!(new_set_result.files, {
@@ -120,6 +122,7 @@ fn dryrun() -> Result<()> {
         &AbsolutePath::for_existing_path(sim.profile_path())?,
         vec![sim.local_path("notinrepo"), sim.local_path("alsonotinrepo")],
         SetName("newset".into()),
+        None,
     )?;
     expect_that!(new_set_result.new_set, pat!(SetName("newset")));
     expect_that!(new_set_result.files, { eq(Path::new("notinrepo")), eq(Path::new("alsonotinrepo")) });
@@ -151,6 +154,7 @@ fn set_exists() -> Result<()> {
         &AbsolutePath::for_existing_path(sim.profile_path())?,
         vec![sim.local_path("notinrepo"), sim.local_path("alsonotinrepo")],
         SetName("newset".into()),
+        None,
     );
 
     let set_name = SetName("newset".into());

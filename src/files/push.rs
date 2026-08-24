@@ -6,7 +6,7 @@ use super::{convert_set_localfile_result, local, repo, rsync::rsync};
 
 #[derive(Error, Debug)]
 pub enum PushError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Unable to initialize local state.")]

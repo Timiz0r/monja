@@ -1,11 +1,17 @@
-use std::{fmt::Display, fs, ops::Deref, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap, btree_map},
+    fmt::Display,
+    fs,
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 
 use indoc::indoc;
 use relative_path::{RelativePath, RelativePathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{AbsolutePath, MonjaProfile};
+use crate::{AbsolutePath, MonjaProfile, RepoName, repo::format_repo_names};
 
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -19,22 +25,20 @@ pub struct SetConfig {
 }
 
 impl SetConfig {
-    pub fn load(
-        profile: &crate::MonjaProfile,
-        set_name: &SetName,
-    ) -> Result<SetConfig, SetConfigError> {
-        let config_path = profile.repo_root.join(set_name).join(".monja-set.toml");
+    // takes the set's resolved root, rather than a profile, because a set name alone no longer
+    // identifies a directory once a profile can have several repos.
+    pub fn load(set_root: &Path, set_name: &SetName) -> Result<SetConfig, SetConfigError> {
+        let config_path = set_root.join(".monja-set.toml");
         // is optional file
         let config = fs::read(config_path).unwrap_or_default();
 
         toml::from_slice(&config).map_err(|e| SetConfigError::Deserialization(set_name.clone(), e))
     }
 
-    pub fn save(&self, profile: &MonjaProfile, set_name: &SetName) -> Result<(), SetConfigError> {
-        let set_dir = profile.repo_root.join(set_name);
-        fs::create_dir_all(&set_dir).map_err(|e| SetConfigError::Save(set_name.clone(), e))?;
+    pub fn save(&self, set_root: &Path, set_name: &SetName) -> Result<(), SetConfigError> {
+        fs::create_dir_all(set_root).map_err(|e| SetConfigError::Save(set_name.clone(), e))?;
 
-        let config_path = set_dir.join(".monja-set.toml");
+        let config_path = set_root.join(".monja-set.toml");
         let config = toml::to_string(&self)
             .map_err(|e| SetConfigError::Serialization(set_name.clone(), e))?;
 
@@ -42,7 +46,7 @@ impl SetConfig {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SetName(pub String);
 impl Display for SetName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -131,38 +135,85 @@ pub enum SetCreationError {
     #[error("Set already exists.")]
     SetExists(SetName),
 }
-
-// the shared discovery step every set-aware mechanism (file, package) builds on:
-// enumerating which sets exist in the repo, without assuming anything about what a
-// particular mechanism wants to load for each one (file contents vs. just config).
+// raised when a command names a set that can't be resolved to exactly one directory.
+// `Ambiguous` is deliberately distinct from `NotFound`: a set duplicated across repos is very
+// much present, and reporting it as missing would send the user looking in the wrong place.
 #[derive(Error, Debug)]
-pub(crate) enum DiscoverSetsError {
-    #[error("Unable to read the state of the repo.")]
-    ReadSetDirs(#[source] std::io::Error),
-    #[error("Unable to convert dir name into set name: {0:?}")]
-    NonUtf8Path(std::ffi::OsString),
+pub enum SetLookupError {
+    #[error("Set '{0}' not found in any of the profile's repos.")]
+    NotFound(SetName),
+
+    #[error("Set '{name}' exists in multiple repos ({}), so it can't be resolved. Rename it in all but one of them.", format_repo_names(.repos))]
+    Ambiguous { name: SetName, repos: Vec<RepoName> },
 }
 
-pub(crate) fn discover_sets(
+// the per-set state a mechanism (files, packages) loaded, plus the names it had to skip for
+// being ambiguous. generic over the payload because files and packages load different things
+// for a set (walked file contents vs. just a package list) but discover and resolve identically.
+pub(crate) struct SetStates<T> {
+    pub sets: HashMap<SetName, T>,
+    // names found in more than one repo and not targeted by the profile. they're excluded from
+    // `sets`, so they're kept here to tell an explicit `--set` reference apart from a typo.
+    pub ambiguous_sets: BTreeMap<SetName, Vec<RepoName>>,
+}
+
+impl<T> SetStates<T> {
+    // falls back to the skipped-for-ambiguity names so that an explicit reference to one says
+    // so, rather than misreporting a very-much-present set as missing.
+    pub(crate) fn get(&self, name: &SetName) -> Result<&T, SetLookupError> {
+        if let Some(set) = self.sets.get(name) {
+            return Ok(set);
+        }
+
+        match self.ambiguous_sets.get(name) {
+            Some(repos) => Err(SetLookupError::Ambiguous {
+                name: name.clone(),
+                repos: repos.clone(),
+            }),
+            None => Err(SetLookupError::NotFound(name.clone())),
+        }
+    }
+}
+
+// discovers every set across the profile's repos and loads each resolvable one via `load`,
+// leaving what that means entirely up to the caller.
+//
+// errors are collected rather than returned on the first failure, matching what the mechanisms
+// did individually -- a repo with several problems should report all of them at once.
+pub(crate) fn load_sets<T, E>(
     profile: &MonjaProfile,
-) -> Result<Vec<(SetName, PathBuf)>, Vec<DiscoverSetsError>> {
-    // while we'll prefer to collect errors into a vector, there's no point in continuing if we can't read this dir.
-    let read_dir =
-        fs::read_dir(&profile.repo_root).map_err(|e| vec![DiscoverSetsError::ReadSetDirs(e)])?;
+    ambiguous: impl Fn(SetLookupError) -> E,
+    load: impl Fn(&SetName, &SetLocation) -> Result<T, E>,
+) -> Result<SetStates<T>, Vec<E>>
+where
+    E: From<DiscoverSetsError>,
+{
+    let index = discover_sets(profile)
+        .map_err(|errs| errs.into_iter().map(Into::into).collect::<Vec<_>>())?;
 
-    let mut set_info = Vec::new();
+    let mut sets = HashMap::new();
+    let mut ambiguous_sets = BTreeMap::new();
     let mut errors = Vec::new();
-
-    for result in read_dir {
-        match result {
-            Err(err) => errors.push(DiscoverSetsError::ReadSetDirs(err)),
-            Ok(e) if e.path().is_dir() => {
-                match e.file_name().into_string() {
-                    Ok(str) => set_info.push((SetName(str), e.path())),
-                    Err(initial) => errors.push(DiscoverSetsError::NonUtf8Path(initial)),
-                };
+    for (set_name, _) in index.iter() {
+        let location = match index.resolve(set_name) {
+            Ok(location) => location,
+            // a name in several repos is only a problem if the profile actually uses it.
+            // if it does, we fail; if it doesn't, we remember why it's missing and move on.
+            Err(err) => {
+                match (&err, profile.config.target_sets.contains(set_name)) {
+                    (_, true) => errors.push(ambiguous(err)),
+                    (SetLookupError::Ambiguous { repos, .. }, false) => {
+                        ambiguous_sets.insert(set_name.clone(), repos.clone());
+                    }
+                    _ => (),
+                }
+                continue;
             }
-            _ => (), // non-dirs
+        };
+
+        match load(set_name, location) {
+            Ok(set) => _ = sets.insert(set_name.clone(), set),
+            Err(err) => errors.push(err),
         };
     }
 
@@ -170,18 +221,104 @@ pub(crate) fn discover_sets(
         return Err(errors);
     }
 
-    Ok(set_info)
+    Ok(SetStates {
+        sets,
+        ambiguous_sets,
+    })
+}
+
+// the shared discovery step every set-aware mechanism (file, package) builds on:
+// enumerating which sets exist in the repos, without assuming anything about what a
+// particular mechanism wants to load for each one (file contents vs. just config).
+#[derive(Error, Debug)]
+pub(crate) enum DiscoverSetsError {
+    #[error("Unable to read the state of repo '{0}'.")]
+    ReadSetDirs(RepoName, #[source] std::io::Error),
+    #[error("Unable to convert dir name into set name: {0:?}")]
+    NonUtf8Path(std::ffi::OsString),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SetLocation {
+    pub repo: RepoName,
+    pub root: PathBuf,
+}
+
+// every set name found across every configured repo, along with each place it was found.
+// duplicates aren't rejected here on purpose: a collision between two repos only matters if the
+// profile actually uses the name, and failing discovery outright would block unrelated commands.
+struct SetIndex {
+    by_name: BTreeMap<SetName, Vec<SetLocation>>,
+}
+
+impl SetIndex {
+    fn iter(&self) -> btree_map::Iter<'_, SetName, Vec<SetLocation>> {
+        self.by_name.iter()
+    }
+
+    fn resolve(&self, name: &SetName) -> Result<&SetLocation, SetLookupError> {
+        match self.by_name.get(name).map(Vec::as_slice) {
+            None | Some([]) => Err(SetLookupError::NotFound(name.clone())),
+            Some([location]) => Ok(location),
+            Some(locations) => Err(SetLookupError::Ambiguous {
+                name: name.clone(),
+                repos: locations.iter().map(|l| l.repo.clone()).collect(),
+            }),
+        }
+    }
+}
+
+fn discover_sets(profile: &MonjaProfile) -> Result<SetIndex, Vec<DiscoverSetsError>> {
+    let mut by_name: BTreeMap<SetName, Vec<SetLocation>> = BTreeMap::new();
+    let mut errors = Vec::new();
+
+    for (repo_name, repo_root) in profile.repos.iter() {
+        // while we'll prefer to collect errors into a vector, there's no point in continuing
+        // with a repo we can't even read the root of.
+        let read_dir = match fs::read_dir(repo_root) {
+            Ok(read_dir) => read_dir,
+            Err(e) => {
+                errors.push(DiscoverSetsError::ReadSetDirs(repo_name.clone(), e));
+                continue;
+            }
+        };
+
+        for result in read_dir {
+            match result {
+                Err(err) => errors.push(DiscoverSetsError::ReadSetDirs(repo_name.clone(), err)),
+                Ok(e) if e.path().is_dir() => {
+                    match e.file_name().into_string() {
+                        Ok(str) => by_name.entry(SetName(str)).or_default().push(SetLocation {
+                            repo: repo_name.clone(),
+                            root: e.path(),
+                        }),
+                        Err(initial) => errors.push(DiscoverSetsError::NonUtf8Path(initial)),
+                    };
+                }
+                _ => (), // non-dirs
+            };
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(SetIndex { by_name })
 }
 
 pub(crate) fn create_empty_set(
     profile: &MonjaProfile,
+    repo_root: &AbsolutePath,
     name: &SetName,
 ) -> Result<AbsolutePath, SetCreationError> {
-    let set_path = profile.repo_root.join(name);
-    if set_path.exists() {
+    // checking every repo, not just the target one, because creating a name that already exists
+    // elsewhere would manufacture exactly the ambiguity that set resolution refuses to guess at.
+    if profile.repo_roots().any(|root| root.join(name).exists()) {
         return Err(SetCreationError::SetExists(name.clone()));
     }
 
+    let set_path = repo_root.join(name);
     fs::create_dir_all(&set_path).map_err(|e| SetCreationError::SetCreation(name.clone(), e))?;
     fs::write(
         set_path.join(".monja-set.toml"),

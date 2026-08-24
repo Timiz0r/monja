@@ -4,11 +4,14 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, MonjaProfileConfig,
-    MonjaProfileConfigError, SetName, files, set,
+    MonjaProfileConfigError, RepoName, RepoSelectionError, SetName, files, set,
 };
 
 #[derive(Error, Debug)]
 pub enum NewSetError {
+    #[error("Unable to determine which repo to create the set in.")]
+    RepoSelection(#[from] RepoSelectionError),
+
     #[error("Unable to add new set to profile.")]
     ProfileModification(SetName, #[source] MonjaProfileConfigError),
 
@@ -25,6 +28,7 @@ pub enum NewSetError {
 #[derive(Debug)]
 pub struct NewSetSuccess {
     pub new_set: SetName,
+    pub repo: RepoName,
     pub files: Vec<LocalFilePath>,
 }
 
@@ -34,13 +38,26 @@ pub fn new_set(
     profile_config_path: &AbsolutePath,
     files: Vec<LocalFilePath>,
     new_set: SetName,
+    // which repo to create the set in. resolved here, rather than by the caller, so the
+    // requested -> default-repo -> sole-repo chain lives in one place.
+    repo: Option<RepoName>,
     // boxing error because large, according to clippy
 ) -> Result<NewSetSuccess, Box<NewSetError>> {
+    let (repo_name, repo_root) = profile
+        .resolve_repo(repo.as_ref())
+        .map_err(|e| Box::new(NewSetError::from(e)))?;
+    let repo_name = repo_name.clone();
+
     if opts.dry_run {
-        return Ok(NewSetSuccess { new_set, files });
+        return Ok(NewSetSuccess {
+            new_set,
+            repo: repo_name,
+            files,
+        });
     }
 
-    set::create_empty_set(profile, &new_set).map_err(|e| Box::new(e.into()))?;
+    let set_root =
+        set::create_empty_set(profile, repo_root, &new_set).map_err(|e| Box::new(e.into()))?;
 
     let mut profile_config = MonjaProfileConfig::load(profile_config_path)
         .map_err(|e| NewSetError::ProfileModification(new_set.clone(), e))?;
@@ -50,11 +67,11 @@ pub fn new_set(
         .map_err(|e| NewSetError::ProfileModification(new_set.clone(), e))?;
 
     let shortcut = compute_shortcut(&files);
-    let mut set_config = set::SetConfig::load(profile, &new_set)
+    let mut set_config = set::SetConfig::load(&set_root, &new_set)
         .map_err(|e| NewSetError::SetShortcut(new_set.clone(), shortcut.clone(), e))?;
     set_config.shortcut = Some(shortcut.clone());
     set_config
-        .save(profile, &new_set)
+        .save(&set_root, &new_set)
         .map_err(|e| NewSetError::SetShortcut(new_set.clone(), shortcut, e))?;
 
     // note that this wouldn't work in a dry run because the set isn't created, causing put to fail
@@ -63,6 +80,7 @@ pub fn new_set(
 
     Ok(NewSetSuccess {
         new_set: put_result.owning_set,
+        repo: repo_name,
         files: put_result.files,
     })
 }

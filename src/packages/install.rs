@@ -8,7 +8,7 @@ use super::{Config, PackageSets, repo};
 
 #[derive(Error, Debug)]
 pub enum InstallError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Sets needed by the profile are missing from the repo.")]

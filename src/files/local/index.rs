@@ -54,7 +54,7 @@ impl FileIndex {
         .map_err(|e| FileIndexError::Write(IndexKind::Current, e))
     }
 
-    pub(crate) fn tracks(&self, local_file: &local::FilePath) -> bool {
+    fn tracks(&self, local_file: &local::FilePath) -> bool {
         self.set_mapping.contains_key(local_file)
     }
 

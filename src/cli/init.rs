@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use monja::{AbsolutePath, ExecutionOptions, InitSpec};
+use monja::{AbsolutePath, ExecutionOptions, InitSpec, RepoName};
 
 #[derive(Args)]
 pub struct InitCommand {}
@@ -32,6 +32,7 @@ impl InitCommand {
             repo_root,
             data_root,
             relative_repo_root,
+            repo_name: RepoName::default_name(),
             initial_set_name: machine,
         };
         let result = monja::init(&opts, spec)?;
@@ -43,7 +44,9 @@ impl InitCommand {
                     "Profile can be found at '{}'.",
                     result.profile_config_path.display()
                 );
-                println!("Repo can be found in '{}'.", profile.repo_root);
+                for (name, root) in profile.repos.iter() {
+                    println!("Repo '{}' can be found in '{}'.", name, root);
+                }
                 println!(
                     "Set '{}' automatically created.",
                     profile.config.target_sets[0]

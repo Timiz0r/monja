@@ -89,8 +89,8 @@ impl PutCommand {
         let result = monja::put(&profile, &opts, files, owning_set)?;
 
         println!(
-            "Successfully changed the following files to use set `{}` (including copying them to the set):",
-            result.owning_set
+            "Successfully changed the following files to use set `{}` in repo `{}` (including copying them to the set):",
+            result.owning_set, result.repo
         );
         for file in result.files.into_iter() {
             println!("\t{}", file);

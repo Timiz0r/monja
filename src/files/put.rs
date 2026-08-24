@@ -13,11 +13,14 @@ use super::repo::{self, SetPathError};
 
 #[derive(Error, Debug)]
 pub enum PutError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Set not found in repo.")]
     SetNotFound(set::SetName),
+
+    #[error("Set exists in multiple repos.")]
+    AmbiguousSet(#[source] set::SetLookupError),
 
     #[error("Failed to load monja-index.toml.")]
     FileIndex(#[from] local::FileIndexError),
@@ -44,6 +47,7 @@ pub enum PutError {
 #[derive(Debug)]
 pub struct PutSuccess {
     pub owning_set: set::SetName,
+    pub repo: crate::RepoName,
     pub files: Vec<LocalFilePath>,
 
     pub set_is_targeted: bool,
@@ -66,10 +70,10 @@ pub fn put(
         .iter()
         .position(|s: &SetName| *s == owning_set);
 
-    let owning_set = repo
-        .sets
-        .get(&owning_set)
-        .ok_or_else(|| PutError::SetNotFound(owning_set.clone()))?;
+    let owning_set = repo.get_set(&owning_set).map_err(|e| match e {
+        set::SetLookupError::NotFound(name) => PutError::SetNotFound(name),
+        e => PutError::AmbiguousSet(e),
+    })?;
 
     // will flip it later to calculate untracked files
     let mut tracked_files = HashSet::new();
@@ -128,6 +132,7 @@ pub fn put(
         .collect();
     Ok(PutSuccess {
         owning_set: owning_set.name.clone(),
+        repo: owning_set.repo.clone(),
         files: result_files,
         set_is_targeted: owning_set_pos.is_some(),
         files_in_later_sets: files_in_later_sets.into_iter().collect(),

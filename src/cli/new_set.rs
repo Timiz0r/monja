@@ -1,15 +1,23 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use monja::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName};
+use clap_complete::engine::ArgValueCandidates;
+use monja::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, RepoName, SetName};
 
 use crate::cli::files::{read_paths_from_stdin, read_paths_interactively, to_local_paths};
+use crate::completions;
 
 #[derive(Args)]
 pub struct NewSetCommand {
     /// The set into which the files will be copied
     #[arg(long = "set")]
     new_set: String,
+
+    /// The repo to create the set in.
+    ///
+    /// Only needed when the profile has several repos and no `default-repo` is configured.
+    #[arg(long = "repo", add = ArgValueCandidates::new(completions::repo_names))]
+    repo: Option<String>,
 
     /// If set, the paths provided will be relative to the local root, ignoring cwd.
     ///
@@ -83,11 +91,12 @@ impl NewSetCommand {
 
         let base = xdg::BaseDirectories::with_prefix("monja");
         let path = AbsolutePath::for_existing_path(&base.place_config_file("monja-profile.toml")?)?;
-        let result = monja::new_set(&profile, &opts, &path, files, SetName(self.new_set))?;
+        let repo = self.repo.as_deref().map(RepoName::from);
+        let result = monja::new_set(&profile, &opts, &path, files, SetName(self.new_set), repo)?;
 
         println!(
-            "Successfully created new set `{}` with the following files:",
-            result.new_set,
+            "Successfully created new set `{}` in repo `{}` with the following files:",
+            result.new_set, result.repo,
         );
         for file in result.files.into_iter() {
             println!("\t{}", file);

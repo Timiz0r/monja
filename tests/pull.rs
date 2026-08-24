@@ -290,7 +290,7 @@ fn missing_repo_folder() -> Result<()> {
     }
 
     let profile = MonjaProfile {
-        repo_root,
+        repos: std::collections::BTreeMap::from([(monja::RepoName::default_name(), repo_root)]),
         ..sim.profile()?
     };
     let result = monja::pull(&profile, sim.execution_options());

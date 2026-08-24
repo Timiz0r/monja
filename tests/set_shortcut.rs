@@ -50,7 +50,7 @@ fn basic_change() -> Result<()> {
         file "baz.conf" "world"
     };
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(config.shortcut, some(eq(Path::new(".config/foo"))));
 
     Ok(())
@@ -124,7 +124,7 @@ fn remove_shortcut() -> Result<()> {
         file ".config/bar.conf" "hello"
     };
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(config.shortcut, none());
 
     Ok(())
@@ -234,7 +234,7 @@ fn dryrun() -> Result<()> {
         end
     };
 
-    let config = SetConfig::load(&sim.profile()?, &SetName("myset".into()))?;
+    let config = SetConfig::load(&sim.repo_root().join("myset"), &SetName("myset".into()))?;
     expect_that!(config.shortcut, some(eq(Path::new(".config"))));
 
     Ok(())

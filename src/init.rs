@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
-    PullError, SetName, set,
+    PullError, RepoName, SetName, set,
 };
 
 #[derive(Error, Debug)]
@@ -46,6 +46,7 @@ pub struct InitSpec {
     pub repo_root: AbsolutePath,
     pub data_root: AbsolutePath,
     pub relative_repo_root: PathBuf,
+    pub repo_name: RepoName,
     pub initial_set_name: String,
 }
 
@@ -61,15 +62,24 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
         });
     }
 
+    // the `[repos]` table has to come after every top-level key, or TOML would read those keys
+    // as belonging to the table.
     fs::write(
         &spec.profile_config_path,
         formatdoc! {"
-            repo-dir = '{}'
-
             target-sets = [
-                '{}',
+                '{set}',
             ]
-        ", spec.relative_repo_root.display(), &spec.initial_set_name },
+
+            default-repo = '{repo}'
+
+            [repos]
+            {repo} = '{dir}'
+        ",
+            set = &spec.initial_set_name,
+            repo = &spec.repo_name,
+            dir = spec.relative_repo_root.display(),
+        },
     )
     .map_err(InitError::Profile)?;
 
@@ -78,9 +88,13 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
             .expect("Just made the profile file."),
     )?;
     let profile = MonjaProfile::from_config(profile, spec.local_root, spec.data_root)
-        .map_err(MonjaProfileConfigError::Load)?;
+        .map_err(MonjaProfileConfigError::from)?;
 
-    let set_path = set::create_empty_set(&profile, &SetName(spec.initial_set_name))?;
+    let set_path = set::create_empty_set(
+        &profile,
+        &spec.repo_root,
+        &SetName(spec.initial_set_name.clone()),
+    )?;
 
     // goes before creating profile for move reasons
     let ignorefile = set_path.join(".monjaignore");
@@ -139,14 +153,21 @@ const README: &str = indoc! {"
     It lives in `$XDG_CONFIG_HOME/monja/monja-profile.toml`. Sample:
 
     ```toml
-    # this can be an absolute path or a path relative to $HOME
-    repo-dir = '.local/share/monja/repo'
-
     # these are layered on top of each other. if a file is in multiple sets, the later one wins.
     target-sets = [
         'foo',
         'bar',
         'baz',
     ]
+
+    # which repo `monja newset` and `monja repodir` act on.
+    # unnecessary when only one repo is configured.
+    default-repo = 'default'
+
+    # a profile can draw sets from any number of repos.
+    # each path can be absolute or relative to $HOME.
+    # a set name may only appear in one repo, otherwise it can't be resolved.
+    [repos]
+    default = '.local/share/monja/repo'
     ```
-"};
+    "};

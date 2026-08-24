@@ -8,11 +8,14 @@ use super::repo;
 
 #[derive(Error, Debug)]
 pub enum SetShortcutError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Set not found in repo.")]
     SetNotFound(set::SetName),
+
+    #[error("Set exists in multiple repos.")]
+    AmbiguousSet(#[source] set::SetLookupError),
 
     #[error("New shortcut is invalid.")]
     InvalidShortcut(#[from] set::SetShortcutError),
@@ -65,10 +68,10 @@ pub fn set_shortcut(
     let repo =
         repo::initialize_full_state(profile).map_err(SetShortcutError::RepoStateInitialization)?;
 
-    let set = repo
-        .sets
-        .get(&set_name)
-        .ok_or_else(|| SetShortcutError::SetNotFound(set_name.clone()))?;
+    let set = repo.get_set(&set_name).map_err(|e| match e {
+        set::SetLookupError::NotFound(name) => SetShortcutError::SetNotFound(name),
+        e => SetShortcutError::AmbiguousSet(e),
+    })?;
 
     // compute new paths for all files and validate they all fit under the new shortcut
     let mut moves: Vec<(PathBuf, PathBuf)> = Vec::new();
@@ -120,13 +123,13 @@ pub fn set_shortcut(
 
     cleanup_empty_dirs(&set.root)?;
 
-    let mut config = set::SetConfig::load(profile, &set_name)?;
+    let mut config = set::SetConfig::load(&set.root, &set_name)?;
     config.shortcut = if new_shortcut_path.as_os_str().is_empty() {
         None
     } else {
         Some(new_shortcut_path.clone())
     };
-    config.save(profile, &set_name)?;
+    config.save(&set.root, &set_name)?;
 
     Ok(SetShortcutSuccess {
         set_name,

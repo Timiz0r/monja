@@ -9,7 +9,7 @@ use super::repo::{self, SetPathError};
 
 #[derive(Error, Debug)]
 pub enum TransferError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Source set not found in repo.")]
@@ -17,6 +17,9 @@ pub enum TransferError {
 
     #[error("Destination set not found in repo.")]
     DestSetNotFound(set::SetName),
+
+    #[error("Set exists in multiple repos.")]
+    AmbiguousSet(#[source] set::SetLookupError),
 
     #[error("Failed to load monja-index.toml.")]
     FileIndex(#[from] local::FileIndexError),
@@ -72,15 +75,15 @@ pub fn transfer(
         repo::initialize_full_state(profile).map_err(TransferError::RepoStateInitialization)?;
     let mut index = local::FileIndex::load(profile, local::IndexKind::Current)?;
 
-    let source = repo
-        .sets
-        .get(&source_set)
-        .ok_or_else(|| TransferError::SourceSetNotFound(source_set.clone()))?;
+    let source = repo.get_set(&source_set).map_err(|e| match e {
+        set::SetLookupError::NotFound(name) => TransferError::SourceSetNotFound(name),
+        e => TransferError::AmbiguousSet(e),
+    })?;
 
-    let dest = repo
-        .sets
-        .get(&dest_set)
-        .ok_or_else(|| TransferError::DestSetNotFound(dest_set.clone()))?;
+    let dest = repo.get_set(&dest_set).map_err(|e| match e {
+        set::SetLookupError::NotFound(name) => TransferError::DestSetNotFound(name),
+        e => TransferError::AmbiguousSet(e),
+    })?;
 
     let mut result_files = Vec::with_capacity(files.len());
     for public_file in files.into_iter() {

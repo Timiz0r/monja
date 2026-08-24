@@ -5,7 +5,7 @@ I just like naming projects after my favorite foods 🤷.
 
 As far as this project is concerned,
 Monja is a very simple to use and easy to reason about multi-machine dotfiles manager.
-Files are stored in a `sets` found in a `repo`,
+Files are stored in `sets` found in one or more `repos`,
 and a portion (or all) of these sets can be chosen to be synchronized locally.
 If a file is found in multiple sets, then the latest set's file wins.
 
@@ -57,6 +57,8 @@ Again, this will provide `fzf` with a list of files in cwd -- every single one (
 The `--nocwd` flag is usable here, as well.
 This command will create a new set, copy the files to it, and modify the profile to use the new set.
 If all files in the set have a common prefix, the set will be configured with a `shortcut` to reduce folder nesting.
+If the profile has multiple repos, add `--repo <repo>` (or configure a `default-repo`) to say
+where the set should be created.
 
 Also note that `monja newset` can also take files via `-- <file 1> <file 2> ...` or newline-delimited stdin.
 In fact, all three methods of specifying files can be combined.
@@ -64,6 +66,57 @@ In fact, all three methods of specifying files can be combined.
 ### `git init`
 You'll probably want to turn your monja repo into a git repo.
 You can navigate to it quickly with `monja repodir | cd`.
+
+### Using multiple repos
+A profile can draw sets from any number of repos -- handy when, say, work dotfiles live in one
+repo and personal ones in another. This only widens the pool of sets the profile can target;
+everything else works exactly as it does with one repo.
+
+```toml
+# these are layered on top of each other. if a file is in multiple sets, the later one wins.
+# sets from different repos are layered together, purely in this order.
+target-sets = [
+    'common',
+    'workstation',
+]
+
+# which repo `monja newset` and `monja repodir` act on.
+# only needed when there's more than one repo.
+default-repo = 'personal'
+
+# each path can be absolute or relative to $HOME
+[repos]
+personal = '.local/share/monja/repo'
+work = '/srv/work-dotfiles'
+```
+
+The order of `[repos]` means nothing -- precedence comes solely from `target-sets`. Because of
+that, a set name may only exist in one repo. If a name appears in several and the profile
+actually uses it, monja errors out rather than guessing:
+
+* If the duplicated name is in `target-sets`, commands like `monja file pull` fail.
+* If it's passed explicitly (`--set`, `--from`, `--to`), that command fails.
+* If it's never used, it's ignored, so an unrelated collision won't block you.
+
+To fix a collision, rename the set in all but one of the repos.
+
+Commands that don't reference an existing set have to be told which repo to act on:
+
+```sh
+monja newset --repo work --set worklaptop -i
+monja repodir --repo work | cd
+```
+
+Both fall back to `default-repo`, and when only one repo is configured neither `--repo` nor
+`default-repo` is needed at all.
+
+The older single-repo form is still supported and behaves as one repo named `default`:
+
+```toml
+repo-dir = '.local/share/monja/repo'
+```
+
+Setting both `repo-dir` and `[repos]` is an error.
 
 ### Pushing to the repo
 To put local changes into the repo, simply run `monja file push`.

@@ -150,7 +150,7 @@ pub(super) fn walk(
     profile: &MonjaProfile,
 ) -> impl Iterator<Item = Result<FilePath, LocalWalkError>> {
     let local_root = &profile.local_root;
-    let repo_root = &profile.repo_root;
+    let repo_roots: Vec<PathBuf> = profile.repo_roots().map(|r| r.to_path_buf()).collect();
     let walker = WalkBuilder::new(local_root)
         .standard_filters(false)
         .add_custom_ignore_filename(".monjaignore")
@@ -162,8 +162,9 @@ pub(super) fn walk(
         // using map_or in this way is the only way I can think of at the moment
         .filter(|r| r.as_ref().map_or(true, |e| e.path().is_file()))
         .filter(move |r| {
-            r.as_ref()
-                .map_or(true, |e| !e.path().starts_with(repo_root))
+            r.as_ref().map_or(true, |e| {
+                !repo_roots.iter().any(|root| e.path().starts_with(root))
+            })
         })
         .filter(|r| {
             r.as_ref()

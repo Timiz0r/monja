@@ -24,7 +24,10 @@ impl AddCommand {
         let result = monja::add(&profile, &opts, SetName(self.set_name), self.packages)?;
 
         if !result.added.is_empty() {
-            println!("Added the following packages to set `{}`:", result.set_name);
+            println!(
+                "Added the following packages to set `{}` (in repo `{}`):",
+                result.set_name, result.repo
+            );
             for package in result.added.iter() {
                 println!("\t{}", package);
             }

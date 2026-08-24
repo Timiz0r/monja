@@ -8,11 +8,14 @@ use super::repo;
 
 #[derive(Error, Debug)]
 pub enum AddError {
-    #[error("Unable to initialize repo state.")]
+    #[error("Unable to initialize repo state:{}", crate::format_errors(.0))]
     RepoStateInitialization(Vec<repo::StateInitializationError>),
 
     #[error("Set not found in repo.")]
     SetNotFound(set::SetName),
+
+    #[error("Set exists in multiple repos.")]
+    AmbiguousSet(#[source] set::SetLookupError),
 
     #[error("Unable to load or save .monja-set.toml.")]
     SetConfig(#[from] set::SetConfigError),
@@ -21,6 +24,7 @@ pub enum AddError {
 #[derive(Debug)]
 pub struct AddSuccess {
     pub set_name: set::SetName,
+    pub repo: crate::RepoName,
     pub added: Vec<String>,
     pub already_present: Vec<String>,
 }
@@ -32,11 +36,12 @@ pub fn add(
     packages: Vec<String>,
 ) -> Result<AddSuccess, AddError> {
     let repo = repo::initialize_state(profile).map_err(AddError::RepoStateInitialization)?;
-    repo.sets
-        .get(&set_name)
-        .ok_or_else(|| AddError::SetNotFound(set_name.clone()))?;
+    let set = repo.get_set(&set_name).map_err(|e| match e {
+        set::SetLookupError::NotFound(name) => AddError::SetNotFound(name),
+        e => AddError::AmbiguousSet(e),
+    })?;
 
-    let mut config = set::SetConfig::load(profile, &set_name)?;
+    let mut config = set::SetConfig::load(&set.root, &set_name)?;
     let existing: HashSet<&str> = config.packages.iter().map(String::as_str).collect();
 
     let mut added = Vec::new();
@@ -52,11 +57,12 @@ pub fn add(
     if !opts.dry_run && !added.is_empty() {
         config.packages.extend(added.iter().cloned());
         config.packages.sort();
-        config.save(profile, &set_name)?;
+        config.save(&set.root, &set_name)?;
     }
 
     Ok(AddSuccess {
         set_name,
+        repo: set.repo.clone(),
         added,
         already_present,
     })

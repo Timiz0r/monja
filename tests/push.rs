@@ -5,7 +5,7 @@ use googletest::prelude::*;
 use crate::sim::{Simulator, set_names};
 use monja::{
     AbsolutePath, LocalStateInitializationError, MonjaProfileConfig, MonjaProfileConfigError,
-    PushError, SetName,
+    ProfileError, PushError, SetName,
 };
 
 #[allow(dead_code)]
@@ -196,7 +196,7 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
 
     sim.configure_profile(|_| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
-        repo_dir: repo_root.to_path_buf(),
+        repo_dir: Some(repo_root.to_path_buf()),
         ..Default::default()
     });
 
@@ -212,7 +212,12 @@ fn missing_repo_folder_pre_profile() -> Result<()> {
     // versus actually getting to push, we should fail when trying to create a profile
     // which actually kinda means this test could go in pull.rs, as well
     let profile_result = sim.profile();
-    expect_that!(profile_result, err(pat!(MonjaProfileConfigError::Load(..))));
+    expect_that!(
+        profile_result,
+        err(pat!(MonjaProfileConfigError::Profile(pat!(
+            ProfileError::RepoPath(..)
+        ))))
+    );
 
     Ok(())
 }
@@ -229,7 +234,7 @@ fn missing_repo_folder_post_profile() -> Result<()> {
 
     sim.configure_profile(|_| MonjaProfileConfig {
         target_sets: set_names(["simple"]),
-        repo_dir: repo_root.to_path_buf(),
+        repo_dir: Some(repo_root.to_path_buf()),
         ..Default::default()
     });
 

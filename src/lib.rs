@@ -2,7 +2,7 @@
 #![deny(clippy::unwrap_used)]
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     ffi::{OsStr, OsString},
     io::{Read, Write},
     ops::Deref,
@@ -17,6 +17,7 @@ use thiserror::Error;
 
 pub mod files;
 pub mod packages;
+pub(crate) mod repo;
 pub(crate) mod set;
 
 pub mod init;
@@ -25,8 +26,10 @@ pub mod new_set;
 pub use crate::{
     files::RepoFilePath, files::clean::*, files::pull::*, files::push::*, files::put::*,
     files::set_shortcut::*, files::status::*, files::transfer::*, init::*, new_set::*,
-    packages::add::*, packages::install::*, packages::list::*, packages::remove::*, set::SetConfig,
-    set::SetConfigError, set::SetCreationError, set::SetName, set::SetShortcutError,
+    packages::add::*, packages::install::*, packages::list::*, packages::remove::*,
+    repo::ProfileError, repo::RepoName, repo::RepoSelectionError, set::SetConfig,
+    set::SetConfigError, set::SetCreationError, set::SetLookupError, set::SetName,
+    set::SetShortcutError,
 };
 
 pub type LocalStateInitializationError = files::local::StateInitializationError;
@@ -35,7 +38,21 @@ pub type RepoStateInitializationError = files::repo::StateInitializationError;
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct MonjaProfileConfig {
-    pub repo_dir: PathBuf,
+    // the original single-repo form, kept working for profiles that predate named repos.
+    // mutually exclusive with `repos`; behaves as one repo named `RepoName::DEFAULT`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_dir: Option<PathBuf>,
+
+    // a BTreeMap (rather than a HashMap) because repo order carries no meaning, so we may as well
+    // get deterministic error messages, `repodir` output, and completions out of it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub repos: BTreeMap<RepoName, PathBuf>,
+
+    // which repo commands that don't reference an existing set (`newset`, `repodir`) act on.
+    // unnecessary when only one repo is configured, since that one is the implicit default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_repo: Option<RepoName>,
+
     // while a hashset would be handy, we use a vec because order is important
     pub target_sets: Vec<SetName>,
     #[serde(default)]
@@ -52,6 +69,9 @@ pub enum MonjaProfileConfigError {
 
     #[error("Unable to read from monja-profile.toml.")]
     Load(#[source] AbsolutePathError),
+
+    #[error("The profile's repo configuration is not usable.")]
+    Profile(#[from] ProfileError),
 
     #[error("Unable to write to monja-profile.toml.")]
     Write(#[source] std::io::Error),
@@ -79,7 +99,7 @@ impl MonjaProfileConfig {
 #[derive(Debug)]
 pub struct MonjaProfile {
     pub local_root: AbsolutePath,
-    pub repo_root: AbsolutePath,
+    pub repos: BTreeMap<RepoName, AbsolutePath>,
     pub data_root: AbsolutePath,
 
     pub config: MonjaProfileConfig,
@@ -90,18 +110,52 @@ impl MonjaProfile {
         config: MonjaProfileConfig,
         local_root: AbsolutePath,
         data_root: AbsolutePath,
-    ) -> Result<MonjaProfile, AbsolutePathError> {
-        let repo_root = match config.repo_dir.is_relative() {
-            true => AbsolutePath::for_existing_path(&local_root.join(&config.repo_dir))?,
-            false => AbsolutePath::for_existing_path(&config.repo_dir)?,
-        };
+    ) -> Result<MonjaProfile, ProfileError> {
+        let repos = repo::resolve_repos(&config, &local_root)?;
 
         Ok(MonjaProfile {
             local_root,
-            repo_root,
+            repos,
             data_root,
             config,
         })
+    }
+
+    pub fn repo_names(&self) -> Vec<RepoName> {
+        self.repos.keys().cloned().collect()
+    }
+
+    pub fn repo_roots(&self) -> impl Iterator<Item = &AbsolutePath> {
+        self.repos.values()
+    }
+
+    // the requested repo, else the configured default, else the sole repo if there's only one.
+    // the single-repo case being an implicit default is what keeps `--repo` from ever being
+    // needed by profiles that don't actually have multiple repos.
+    pub fn resolve_repo(
+        &self,
+        requested: Option<&RepoName>,
+    ) -> Result<(&RepoName, &AbsolutePath), RepoSelectionError> {
+        let name = match (requested, self.config.default_repo.as_ref()) {
+            (Some(name), _) => name,
+            (None, Some(default)) => default,
+            (None, None) => {
+                let mut repos = self.repos.iter();
+                return match (repos.next(), repos.next()) {
+                    (Some((name, root)), None) => Ok((name, root)),
+                    _ => Err(RepoSelectionError::NoDefault {
+                        available: self.repo_names(),
+                    }),
+                };
+            }
+        };
+
+        self.repos
+            .get_key_value(name)
+            .ok_or_else(|| RepoSelectionError::UnknownRepo {
+                name: name.clone(),
+                available: self.repo_names(),
+            })
     }
 }
 
@@ -325,26 +379,47 @@ pub fn is_monja_special_file(path: &Path) -> bool {
         .is_some_and(|f: &OsStr| MONJA_SPECIAL_FILES.contains(f))
 }
 
+// thiserror can only chain a single `#[source]`, so a variant holding a Vec of errors would
+// otherwise display as a bare summary with every underlying cause dropped -- which makes
+// aggregate failures (a set duplicated across repos, an unreadable repo) impossible to act on.
+// this renders the whole lot, including each error's own source chain.
+pub(crate) fn format_errors<E: std::error::Error>(errors: &[E]) -> String {
+    let mut result = String::new();
+    for error in errors {
+        result.push_str("\n\t");
+        result.push_str(&error.to_string());
+
+        let mut source = error.source();
+        while let Some(cause) = source {
+            result.push_str("\n\t\t");
+            result.push_str(&cause.to_string());
+            source = cause.source();
+        }
+    }
+
+    result
+}
+
 // unit testing because we wouldn't otherwise get coverage on LocalFilePath without e2e tests
 #[cfg(test)]
 mod localfilepath_tests {
-    use std::path::Path;
+    use std::{collections::BTreeMap, path::Path};
 
     use googletest::prelude::*;
 
-    use crate::{AbsolutePath, LocalFilePath, MonjaProfile, MonjaProfileConfig};
+    use crate::{AbsolutePath, LocalFilePath, MonjaProfile, MonjaProfileConfig, RepoName};
 
     #[gtest]
     fn normal() -> Result<()> {
         let config = MonjaProfileConfig {
-            repo_dir: "/home/foo/repo".into(),
+            repo_dir: Some("/home/foo/repo".into()),
             target_sets: Vec::new(),
             ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
             local_root: "/home/foo".into(),
-            repo_root: "/home/foo/repo".into(),
+            repos: BTreeMap::from([(RepoName::default_name(), "/home/foo/repo".into())]),
             data_root: "/home/foo/data".into(),
             config,
         };
@@ -358,14 +433,14 @@ mod localfilepath_tests {
     #[gtest]
     fn absolute() -> Result<()> {
         let config = MonjaProfileConfig {
-            repo_dir: "/home/foo/repo".into(),
+            repo_dir: Some("/home/foo/repo".into()),
             target_sets: Vec::new(),
             ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
             local_root: "/home/foo".into(),
-            repo_root: "/home/foo/repo".into(),
+            repos: BTreeMap::from([(RepoName::default_name(), "/home/foo/repo".into())]),
             data_root: "/home/foo/data".into(),
             config,
         };
@@ -380,14 +455,14 @@ mod localfilepath_tests {
     #[gtest]
     fn subdir() -> Result<()> {
         let config = MonjaProfileConfig {
-            repo_dir: "/home/foo/repo".into(),
+            repo_dir: Some("/home/foo/repo".into()),
             target_sets: Vec::new(),
             ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
             local_root: "/home/foo".into(),
-            repo_root: "/home/foo/repo".into(),
+            repos: BTreeMap::from([(RepoName::default_name(), "/home/foo/repo".into())]),
             data_root: "/home/foo/data".into(),
             config,
         };
@@ -401,14 +476,14 @@ mod localfilepath_tests {
     #[gtest]
     fn invalid_absolute() -> Result<()> {
         let config = MonjaProfileConfig {
-            repo_dir: "/home/foo/repo".into(),
+            repo_dir: Some("/home/foo/repo".into()),
             target_sets: Vec::new(),
             ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
             local_root: "/home/foo".into(),
-            repo_root: "/home/foo/repo".into(),
+            repos: BTreeMap::from([(RepoName::default_name(), "/home/foo/repo".into())]),
             data_root: "/home/foo/data".into(),
             config,
         };
@@ -426,14 +501,14 @@ mod localfilepath_tests {
     #[gtest]
     fn invalid_relative() -> Result<()> {
         let config = MonjaProfileConfig {
-            repo_dir: "/home/foo/repo".into(),
+            repo_dir: Some("/home/foo/repo".into()),
             target_sets: Vec::new(),
             ..Default::default()
         };
         // don't use ::new because it requires paths to exist
         let profile = MonjaProfile {
             local_root: "/home/foo".into(),
-            repo_root: "/home/foo/repo".into(),
+            repos: BTreeMap::from([(RepoName::default_name(), "/home/foo/repo".into())]),
             data_root: "/home/foo/data".into(),
             config,
         };

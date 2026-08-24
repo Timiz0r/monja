@@ -9,7 +9,7 @@ use tempfile::TempDir;
 
 use monja::{
     AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, MonjaProfileConfig,
-    MonjaProfileConfigError, SetConfig, SetName,
+    MonjaProfileConfigError, RepoName, SetConfig, SetName,
 };
 use walkdir::WalkDir;
 
@@ -18,7 +18,9 @@ use walkdir::WalkDir;
 // if we find that a test is to fragile, we can of course loosen the matching, or perhaps even come up with a better overall design.
 
 pub(crate) struct Simulator {
-    repo_root: TempDir,
+    // the first repo is the one `repo_root()` returns, and -- since `create` starts with exactly
+    // one -- it stays the implicit default until a test calls `add_repo`.
+    repos: Vec<(RepoName, TempDir)>,
     local_root: TempDir,
     data_root: TempDir,
 
@@ -41,8 +43,13 @@ impl Simulator {
             .tempdir_in(&local_dir)
             .unwrap();
 
+        let repos = vec![(RepoName::default_name(), repo_dir)];
+
         let profile_config = MonjaProfileConfig {
-            repo_dir: repo_dir.path().to_path_buf(),
+            repos: repos
+                .iter()
+                .map(|(name, dir)| (name.clone(), dir.path().to_path_buf()))
+                .collect(),
             target_sets: Vec::new(),
             ..Default::default()
         };
@@ -57,7 +64,7 @@ impl Simulator {
         profile_config.save(&profile_path).unwrap();
 
         Simulator {
-            repo_root: repo_dir,
+            repos,
             local_root: local_dir,
             data_root: data_dir,
             profile_path,
@@ -69,8 +76,47 @@ impl Simulator {
         }
     }
 
+    // adds another repo to the profile. note that this makes the profile multi-repo, so commands
+    // that need to pick one (`newset`, `repodir`) will want a `--repo` or a `default-repo`.
+    pub(crate) fn add_repo(&mut self, name: &str) -> &Path {
+        let name = RepoName::from(name);
+        let dir = tempfile::Builder::new()
+            .prefix("MonjaRepo")
+            .tempdir_in(&self.local_root)
+            .unwrap();
+
+        self.repos.push((name.clone(), dir));
+
+        let repos = self
+            .repos
+            .iter()
+            .map(|(name, dir)| (name.clone(), dir.path().to_path_buf()))
+            .collect();
+        self.configure_profile(|old| MonjaProfileConfig { repos, ..old });
+
+        self.repo_root_for(&name)
+    }
+
     pub(crate) fn repo_root(&self) -> &Path {
-        self.repo_root.path()
+        self.repos[0].1.path()
+    }
+
+    pub(crate) fn repo_root_for(&self, name: &RepoName) -> &Path {
+        self.repos
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, dir)| dir.path())
+            .unwrap_or_else(|| panic!("No repo named '{}' in the simulator.", name))
+    }
+
+    pub(crate) fn repo_roots(&self) -> impl Iterator<Item = &Path> {
+        self.repos.iter().map(|(_, dir)| dir.path())
+    }
+
+    // where a set lives, given the repo it was created in. mirrors what set resolution does,
+    // without depending on it, so tests can assert on the result of resolution.
+    pub(crate) fn set_path_in(&self, repo: &str, set_name: &str) -> PathBuf {
+        self.repo_root_for(&RepoName::from(repo)).join(set_name)
     }
 
     pub(crate) fn local_root(&self) -> &Path {
@@ -116,7 +162,7 @@ impl Simulator {
             local_root,
             data_root,
         )
-        .map_err(MonjaProfileConfigError::Load)
+        .map_err(MonjaProfileConfigError::from)
     }
 
     pub(crate) fn execution_options(&self) -> &ExecutionOptions {
@@ -129,9 +175,9 @@ impl Simulator {
         self
     }
 
-    pub(crate) fn configure_profile<P>(&self, mut config: P) -> &Self
+    pub(crate) fn configure_profile<P>(&self, config: P) -> &Self
     where
-        P: FnMut(MonjaProfileConfig) -> MonjaProfileConfig,
+        P: FnOnce(MonjaProfileConfig) -> MonjaProfileConfig,
     {
         let profile_config = config(self.profile().unwrap().config);
         profile_config.save(&self.profile_path).unwrap();
@@ -139,22 +185,29 @@ impl Simulator {
         self
     }
 
-    pub(crate) fn configure_set<P>(&self, set_name: SetName, mut config: P) -> &Self
+    pub(crate) fn configure_set<P>(&self, set_name: SetName, config: P) -> &Self
     where
-        P: FnMut(SetConfig) -> SetConfig,
+        P: FnOnce(SetConfig) -> SetConfig,
     {
-        let profile = self.profile().unwrap();
-        let set_config = SetConfig::load(&profile, &set_name).unwrap();
+        self.configure_set_in(&self.repos[0].0.clone(), set_name, config)
+    }
+
+    pub(crate) fn configure_set_in<P>(&self, repo: &RepoName, set_name: SetName, config: P) -> &Self
+    where
+        P: FnOnce(SetConfig) -> SetConfig,
+    {
+        let set_root = self.repo_root_for(repo).join(&set_name);
+        let set_config = SetConfig::load(&set_root, &set_name).unwrap();
         let set_config = config(set_config);
 
-        set_config.save(&profile, &set_name).unwrap();
+        set_config.save(&set_root, &set_name).unwrap();
 
         self
     }
 
     // adding is handled by set_operation!
     pub(crate) fn rem_set(&self, set_name: SetName) -> &Self {
-        let path = self.repo_root.path().join(set_name);
+        let path = self.repo_root().join(set_name);
         fs::remove_dir_all(path).unwrap();
 
         self
@@ -199,14 +252,14 @@ impl OperationHandler for Manipulation {
 
 pub(crate) struct LocalValidation {
     local_root: PathBuf,
-    repo_root: PathBuf,
+    repo_roots: Vec<PathBuf>,
     general_validation: GeneralValidation,
 }
 impl LocalValidation {
     pub fn new(sim: &Simulator) -> Self {
         LocalValidation {
-            local_root: sim.local_root.path().to_path_buf(),
-            repo_root: sim.repo_root.path().to_path_buf(),
+            local_root: sim.local_root().to_path_buf(),
+            repo_roots: sim.repo_roots().map(|p| p.to_path_buf()).collect(),
             general_validation: GeneralValidation::new(sim),
         }
     }
@@ -235,7 +288,7 @@ impl OperationHandler for LocalValidation {
             .filter(|e| e.file_type().is_file())
             .map(|e| e.into_path())
             .filter(|p| !monja::is_monja_special_file(p))
-            .filter(|p| !p.starts_with(&self.repo_root))
+            .filter(|p| !self.repo_roots.iter().any(|root| p.starts_with(root)))
             .collect();
 
         expect_that!(local_files, container_eq(self.general_validation.files));
@@ -348,9 +401,26 @@ macro_rules! fs_operation {
 
     // these don't really need to be last, since the internal stuff won't match this.
     // so putting it at the top to stand out more
+    // `RepoSet*` variants take an explicit repo name, for when a test has more than one.
+    (RepoSetManipulation, $sim:expr, $repo:literal, $set:literal, $($tokens:tt)*) => {
+        {
+            let path = $sim.set_path_in($repo, $set);
+            let mut handler = $crate::sim::Manipulation::new(&$sim);
+            fs_operation!(@start (handler, path); ($($tokens)*));
+        }
+    };
+
+    (RepoSetValidation, $sim:expr, $repo:literal, $set:literal, $($tokens:tt)*) => {
+        {
+            let path = $sim.set_path_in($repo, $set);
+            let mut handler = $crate::sim::SetValidation::new(&$sim, &path);
+            fs_operation!(@start (handler, path); ($($tokens)*));
+        }
+    };
+
     (SetManipulation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().unwrap().repo_root.join($set);
+            let path = $sim.repo_root().join($set);
             let mut handler = $crate::sim::Manipulation::new(&$sim);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
@@ -366,7 +436,7 @@ macro_rules! fs_operation {
 
     (SetValidation, $sim:expr, $set:literal, $($tokens:tt)*) => {
         {
-            let path = $sim.profile().unwrap().repo_root.join($set);
+            let path = $sim.repo_root().join($set);
             let mut handler = $crate::sim::SetValidation::new(&$sim, &path);
             fs_operation!(@start (handler, path); ($($tokens)*));
         }
