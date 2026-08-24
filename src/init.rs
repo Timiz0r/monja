@@ -1,20 +1,25 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
-use indoc::{formatdoc, indoc};
+use indoc::indoc;
 use thiserror::Error;
 
 use crate::{
     AbsolutePath, ExecutionOptions, MonjaProfile, MonjaProfileConfig, MonjaProfileConfigError,
-    PullError, RepoName, SetName, set,
+    PullError, RepoName, SetName, repo, set,
 };
 
 #[derive(Error, Debug)]
 pub enum InitError {
-    #[error("monja has already been initialized.")]
+    #[error(
+        "monja has already been initialized. To add another repo to the profile, pass a repo name."
+    )]
     AlreadyInitialized,
 
-    #[error("Failed to create monja-profile.")]
-    Profile(#[source] std::io::Error),
+    #[error("Failed to add the repo to the monja-profile.")]
+    Profile(#[from] repo::RegisterRepoError),
 
     #[error("Failed to create the repo directory '{0}'.")]
     RepoDirectory(PathBuf, #[source] std::io::Error),
@@ -35,11 +40,22 @@ pub enum InitError {
     InitialPull(#[from] PullError),
 }
 
+// what a run of `init` actually did, since the same command both sets monja up from scratch and
+// adds a repo to a profile that's already set up.
+#[derive(Debug)]
+pub enum InitOutcome {
+    Initialized { initial_set: SetName },
+    RepoAdded,
+}
+
 #[derive(Debug)]
 pub struct InitSuccess {
     // only returns None on dryrun
     pub profile: Option<MonjaProfile>,
     pub profile_config_path: PathBuf,
+    pub repo_name: RepoName,
+    pub repo_root: PathBuf,
+    pub outcome: InitOutcome,
 }
 
 pub struct InitSpec {
@@ -47,74 +63,93 @@ pub struct InitSpec {
     pub profile_config_path: PathBuf,
     pub local_root: AbsolutePath,
     pub data_root: AbsolutePath,
-    pub repo_name: RepoName,
+    // None means the user didn't name a repo, which is what separates a plain `init` (an error
+    // once a profile exists) from one that's explicitly asking for a new repo to be added.
+    pub repo_name: Option<RepoName>,
     pub initial_set_name: String,
 }
 
-// where a repo created by `init` lives, relative to the data root. a `repos/<name>` directory
-// rather than a single `repo` one, so that adding a second repo later doesn't need a different
-// layout than the first.
-fn repo_root_for(data_root: &AbsolutePath, repo_name: &RepoName) -> PathBuf {
-    data_root.join("repos").join(repo_name)
+pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, InitError> {
+    match (spec.profile_config_path.exists(), spec.repo_name.as_ref()) {
+        (false, _) => initialize(opts, spec),
+        (true, None) => Err(InitError::AlreadyInitialized),
+        (true, Some(_)) => add_repo(opts, spec),
+    }
 }
 
-pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, InitError> {
-    if spec.profile_config_path.exists() {
-        return Err(InitError::AlreadyInitialized);
-    }
+// adds an empty repo to an already-initialized profile. deliberately bare: no set, no README, no
+// ignorefile, and no pull, since none of that is wanted a second time around -- and no git,
+// which is `monja clone`'s job.
+fn add_repo(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, InitError> {
+    let repo_name = spec
+        .repo_name
+        .clone()
+        .expect("Only called when a repo was named.");
+    let repo_root = repo::repo_root_for(&spec.data_root, &repo_name);
+
+    repo::validate_registration(&spec.profile_config_path, &repo_name)?;
 
     if opts.dry_run {
         return Ok(InitSuccess {
             profile: None,
             profile_config_path: spec.profile_config_path,
+            repo_name,
+            repo_root,
+            outcome: InitOutcome::RepoAdded,
         });
     }
 
-    let repo_root = repo_root_for(&spec.data_root, &spec.repo_name);
-    fs::create_dir_all(&repo_root).map_err(|e| InitError::RepoDirectory(repo_root.clone(), e))?;
-    let repo_root =
-        AbsolutePath::for_existing_path(&repo_root).map_err(MonjaProfileConfigError::Load)?;
-
-    // a path under the local root is recorded relative to it, so a profile stays portable
-    // across machines whose home directories differ.
-    let configured_dir = repo_root
-        .strip_prefix(&spec.local_root)
-        .unwrap_or(&repo_root)
-        .to_path_buf();
-
-    // the `[repos]` table has to come after every top-level key, or TOML would read those keys
-    // as belonging to the table.
-    fs::write(
+    let repo_root = create_repo_dir(&repo_root)?;
+    repo::register_repo(
         &spec.profile_config_path,
-        formatdoc! {"
-            target-sets = [
-                '{set}',
-            ]
-
-            default-repo = '{repo}'
-
-            [repos]
-            {repo} = '{dir}'
-        ",
-            set = &spec.initial_set_name,
-            repo = &spec.repo_name,
-            dir = configured_dir.display(),
-        },
-    )
-    .map_err(InitError::Profile)?;
-
-    let profile = MonjaProfileConfig::load(
-        &AbsolutePath::for_existing_path(&spec.profile_config_path)
-            .expect("Just made the profile file."),
-    )?;
-    let profile = MonjaProfile::from_config(profile, spec.local_root, spec.data_root)
-        .map_err(MonjaProfileConfigError::from)?;
-
-    let set_path = set::create_empty_set(
-        &profile,
+        &spec.local_root,
         &repo_root,
-        &SetName(spec.initial_set_name.clone()),
+        &repo_name,
+        None,
     )?;
+
+    let profile = load_profile(&spec.profile_config_path, spec.local_root, spec.data_root)?;
+
+    Ok(InitSuccess {
+        profile: Some(profile),
+        profile_config_path: spec.profile_config_path,
+        repo_name,
+        repo_root: repo_root.into_path_buf(),
+        outcome: InitOutcome::RepoAdded,
+    })
+}
+
+fn initialize(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, InitError> {
+    let repo_name = spec
+        .repo_name
+        .clone()
+        .unwrap_or_else(RepoName::default_name);
+    let repo_root = repo::repo_root_for(&spec.data_root, &repo_name);
+    let initial_set = SetName(spec.initial_set_name.clone());
+
+    if opts.dry_run {
+        return Ok(InitSuccess {
+            profile: None,
+            profile_config_path: spec.profile_config_path,
+            repo_name,
+            repo_root,
+            outcome: InitOutcome::Initialized { initial_set },
+        });
+    }
+
+    let repo_root = create_repo_dir(&repo_root)?;
+
+    repo::register_repo(
+        &spec.profile_config_path,
+        &spec.local_root,
+        &repo_root,
+        &repo_name,
+        Some(&initial_set),
+    )?;
+
+    let profile = load_profile(&spec.profile_config_path, spec.local_root, spec.data_root)?;
+
+    let set_path = set::create_empty_set(&profile, &repo_root, &initial_set)?;
 
     // goes before creating profile for move reasons
     let ignorefile = set_path.join(".monjaignore");
@@ -132,7 +167,30 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     Ok(InitSuccess {
         profile: Some(profile),
         profile_config_path: spec.profile_config_path,
+        repo_name,
+        repo_root: repo_root.into_path_buf(),
+        outcome: InitOutcome::Initialized { initial_set },
     })
+}
+
+fn create_repo_dir(repo_root: &PathBuf) -> Result<AbsolutePath, InitError> {
+    fs::create_dir_all(repo_root).map_err(|e| InitError::RepoDirectory(repo_root.clone(), e))?;
+
+    AbsolutePath::for_existing_path(repo_root).map_err(|e| MonjaProfileConfigError::Load(e).into())
+}
+
+fn load_profile(
+    profile_config_path: &Path,
+    local_root: AbsolutePath,
+    data_root: AbsolutePath,
+) -> Result<MonjaProfile, InitError> {
+    let config = MonjaProfileConfig::load(
+        &AbsolutePath::for_existing_path(profile_config_path)
+            .expect("The profile file is there by now."),
+    )?;
+
+    MonjaProfile::from_config(config, local_root, data_root)
+        .map_err(|e| MonjaProfileConfigError::from(e).into())
 }
 
 const DEFAULT_IGNORE: &str = indoc! {"
@@ -164,8 +222,10 @@ const README: &str = indoc! {"
 
     To use the dotfiles in this repo:
     1. Install monja
-    2. Clone this repo. The default path is `$XDG_DATA_HOME/monja/repos/<name>`, but anywhere works.
-    3. Create a profile (see below)
+    2. Run `monja clone --repo <name> <url of this repo>`.
+       This clones it to `$XDG_DATA_HOME/monja/repos/<name>` and creates a profile if needed.
+       (You can also clone it anywhere by hand and point a profile at it.)
+    3. Choose the sets you want in the profile (see below)
     4. Run `monja file pull`. Keep in mind this can overwrite existing files.
 
     ### Profiles

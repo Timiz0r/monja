@@ -11,8 +11,8 @@ mod cli;
 mod completions;
 
 use cli::{
-    files::FileArgs, init::InitCommand, new_set::NewSetCommand, packages::PackageArgs,
-    profile::ProfileCommand, repo_dir::RepoDirCommand,
+    clone::CloneCommand, files::FileArgs, init::InitCommand, new_set::NewSetCommand,
+    packages::PackageArgs, profile::ProfileCommand, repo_dir::RepoDirCommand,
 };
 
 #[derive(Parser)]
@@ -34,7 +34,16 @@ enum Commands {
     /// A profile is created that uses a set named after the current hostname.
     /// The set also contains a sample `.monja-set.toml`.
     /// A `.monjaignore`` file is created in `$HOME` with some common defaults.
+    ///
+    /// When already initialized, `--repo <name>` instead creates an additional, empty repo
+    /// and adds it to the profile.
     Init(InitCommand),
+
+    /// Clones an existing repo into the standard repo location and adds it to the profile.
+    ///
+    /// A profile is created if there isn't one yet. No sets are targeted either way,
+    /// so add the ones you want to `target-sets` before running `monja file pull`.
+    Clone(CloneCommand),
 
     /// File management commands: push, pull, clean, put, transfer, setshortcut, status.
     File(FileArgs),
@@ -60,8 +69,8 @@ enum Commands {
 impl Commands {
     fn execute(self, profile: MonjaProfile, opts: ExecutionOptions) -> anyhow::Result<()> {
         match self {
-            Commands::Init(_) => {
-                panic!("Init command should have a separate invocation path.")
+            Commands::Init(_) | Commands::Clone(_) => {
+                panic!("Init and clone commands should have a separate invocation path.")
             }
             Commands::File(command) => command.execute(profile, opts),
             Commands::Package(command) => command.execute(profile, opts),
@@ -92,9 +101,15 @@ fn main() -> anyhow::Result<()> {
     fs::create_dir_all(&data_root)?;
     let data_root = AbsolutePath::for_existing_path(&data_root)?;
 
-    // is a special case, since profile may not exist yet, etc.
-    if let Commands::Init(init) = cli.command {
-        return init.execute(cli.opts, profile_config_path, local_root, data_root);
+    // these are special cases, since the profile may not exist yet, etc.
+    match cli.command {
+        Commands::Init(init) => {
+            return init.execute(cli.opts, profile_config_path, local_root, data_root);
+        }
+        Commands::Clone(clone) => {
+            return clone.execute(cli.opts, profile_config_path, local_root, data_root);
+        }
+        _ => (),
     }
 
     if !profile_config_path.is_file() {

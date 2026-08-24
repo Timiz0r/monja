@@ -22,6 +22,8 @@ using the typical methods for each tool.
   * Used for interactively adding files to the monja repo.
 * bat
   * Used for file previews in `fzf`
+* git
+  * Only needed for `monja clone`. Everything else is git-agnostic.
 
 ## Installation
 For now, this isn't uploaded anywhere. To install, checkout the repo and call `cargo install --path .` from the root.
@@ -47,6 +49,31 @@ You can head to the repo to view this empty set with `monja repodir | cd`.
 A default .monjaignore will also be placed in `$HOME`.
 By default, it filters out most directories from `$HOME` but allows `.config`.
 
+### Starting from an existing repo
+If your dotfiles already live in a git repo, use `monja clone` instead of `monja init`:
+
+```sh
+monja clone --repo personal https://github.com/you/dotfiles
+```
+
+This clones into the standard repo location (`$XDG_DATA_HOME/monja/repos/<name>`) and adds the
+repo to your profile, creating the profile if you don't have one yet. It requires `git` on your
+`PATH`, and fails without touching anything if git is missing, if the clone fails, or if the
+profile already has a repo by that name.
+
+Nothing else is created -- no sets, no README, no `.monjaignore` -- because the cloned repo
+already has whatever content it has. `target-sets` is left empty (or untouched, if you already
+had a profile), so pick the sets you want:
+
+```sh
+$EDITOR $(monja profile)
+monja file pull
+```
+
+`monja clone` also works on an already-set-up machine, as a way to add another repo. To add a
+*new, empty* repo instead, use `monja init --repo <name>`, which creates the directory and adds
+it to the profile without performing any git operations.
+
 ### Adding files to repo
 Files can be added to the default set with `monja file put -i`.
 This starts `fzf` with the list of files in cwd -- except those already in the set.
@@ -66,11 +93,18 @@ In fact, all three methods of specifying files can be combined.
 ### `git init`
 You'll probably want to turn your monja repo into a git repo.
 You can navigate to it quickly with `monja repodir | cd`.
+(Going the other way -- starting from a repo that's already on a remote -- is what
+`monja clone` is for.)
 
 ### Using multiple repos
 A profile can draw sets from any number of repos -- handy when, say, work dotfiles live in one
 repo and personal ones in another. This only widens the pool of sets the profile can target;
 everything else works exactly as it does with one repo.
+
+Add one with `monja clone --repo <name> <url>` (for a repo that already exists) or
+`monja init --repo <name>` (for a new, empty one). Both leave `target-sets` alone, so an added
+repo contributes nothing until you say which of its sets you want. You can of course also edit
+the profile by hand:
 
 ```toml
 # these are layered on top of each other. if a file is in multiple sets, the later one wins.
@@ -116,7 +150,9 @@ The older single-repo form is still supported and behaves as one repo named `def
 repo-dir = '.local/share/monja/repos/default'
 ```
 
-Setting both `repo-dir` and `[repos]` is an error.
+Setting both `repo-dir` and `[repos]` is an error. For the same reason, `monja clone` and
+`monja init --repo` refuse to add a repo to a profile using this form -- convert it to a
+`[repos]` table first.
 
 ### Pushing to the repo
 To put local changes into the repo, simply run `monja file push`.

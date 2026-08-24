@@ -1,3 +1,4 @@
+pub(crate) mod clone;
 pub(crate) mod files;
 pub(crate) mod init;
 pub(crate) mod new_set;

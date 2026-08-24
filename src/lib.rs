@@ -20,16 +20,17 @@ pub mod packages;
 pub(crate) mod repo;
 pub(crate) mod set;
 
+pub mod clone;
 pub mod init;
 pub mod new_set;
 
 pub use crate::{
-    files::RepoFilePath, files::clean::*, files::pull::*, files::push::*, files::put::*,
+    clone::*, files::RepoFilePath, files::clean::*, files::pull::*, files::push::*, files::put::*,
     files::set_shortcut::*, files::status::*, files::transfer::*, init::*, new_set::*,
     packages::add::*, packages::install::*, packages::list::*, packages::remove::*,
-    repo::ProfileError, repo::RepoName, repo::RepoSelectionError, set::SetConfig,
-    set::SetConfigError, set::SetCreationError, set::SetLookupError, set::SetName,
-    set::SetShortcutError,
+    repo::ProfileError, repo::RegisterRepoError, repo::RepoName, repo::RepoRegistration,
+    repo::RepoSelectionError, set::SetConfig, set::SetConfigError, set::SetCreationError,
+    set::SetLookupError, set::SetName, set::SetShortcutError,
 };
 
 pub type LocalStateInitializationError = files::local::StateInitializationError;
