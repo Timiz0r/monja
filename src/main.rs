@@ -94,7 +94,7 @@ fn main() -> anyhow::Result<()> {
 
     // is a special case, since profile may not exist yet, etc.
     if let Commands::Init(init) = cli.command {
-        return init.execute(cli.opts, profile_config_path, local_root, data_root, &base);
+        return init.execute(cli.opts, profile_config_path, local_root, data_root);
     }
 
     if !profile_config_path.is_file() {

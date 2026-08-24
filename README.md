@@ -86,7 +86,7 @@ default-repo = 'personal'
 
 # each path can be absolute or relative to $HOME
 [repos]
-personal = '.local/share/monja/repo'
+personal = '.local/share/monja/repos/personal'
 work = '/srv/work-dotfiles'
 ```
 
@@ -113,7 +113,7 @@ Both fall back to `default-repo`, and when only one repo is configured neither `
 The older single-repo form is still supported and behaves as one repo named `default`:
 
 ```toml
-repo-dir = '.local/share/monja/repo'
+repo-dir = '.local/share/monja/repos/default'
 ```
 
 Setting both `repo-dir` and `[repos]` is an error.

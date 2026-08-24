@@ -12,15 +12,7 @@ impl InitCommand {
         profile_config_path: PathBuf,
         local_root: AbsolutePath,
         data_root: AbsolutePath,
-        base: &xdg::BaseDirectories,
     ) -> anyhow::Result<()> {
-        let repo_root = base.create_data_directory("repo")?;
-        let repo_root = AbsolutePath::for_existing_path(&repo_root)?;
-        let relative_repo_root = repo_root
-            .strip_prefix(&local_root)
-            .expect("Should naturally be a prefix")
-            .to_path_buf();
-
         let machine = fs::read_to_string("/proc/sys/kernel/hostname")
             .expect("If doesn't exist, would prefer panic.")
             .trim()
@@ -29,9 +21,7 @@ impl InitCommand {
         let spec = InitSpec {
             profile_config_path,
             local_root,
-            repo_root,
             data_root,
-            relative_repo_root,
             repo_name: RepoName::default_name(),
             initial_set_name: machine,
         };

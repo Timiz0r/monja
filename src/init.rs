@@ -16,6 +16,9 @@ pub enum InitError {
     #[error("Failed to create monja-profile.")]
     Profile(#[source] std::io::Error),
 
+    #[error("Failed to create the repo directory '{0}'.")]
+    RepoDirectory(PathBuf, #[source] std::io::Error),
+
     #[error("Failed to create set.")]
     Set(#[from] set::SetCreationError),
 
@@ -43,11 +46,16 @@ pub struct InitSpec {
     // not AbsolutePath because it shouldn't exist
     pub profile_config_path: PathBuf,
     pub local_root: AbsolutePath,
-    pub repo_root: AbsolutePath,
     pub data_root: AbsolutePath,
-    pub relative_repo_root: PathBuf,
     pub repo_name: RepoName,
     pub initial_set_name: String,
+}
+
+// where a repo created by `init` lives, relative to the data root. a `repos/<name>` directory
+// rather than a single `repo` one, so that adding a second repo later doesn't need a different
+// layout than the first.
+fn repo_root_for(data_root: &AbsolutePath, repo_name: &RepoName) -> PathBuf {
+    data_root.join("repos").join(repo_name)
 }
 
 pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, InitError> {
@@ -61,6 +69,18 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
             profile_config_path: spec.profile_config_path,
         });
     }
+
+    let repo_root = repo_root_for(&spec.data_root, &spec.repo_name);
+    fs::create_dir_all(&repo_root).map_err(|e| InitError::RepoDirectory(repo_root.clone(), e))?;
+    let repo_root =
+        AbsolutePath::for_existing_path(&repo_root).map_err(MonjaProfileConfigError::Load)?;
+
+    // a path under the local root is recorded relative to it, so a profile stays portable
+    // across machines whose home directories differ.
+    let configured_dir = repo_root
+        .strip_prefix(&spec.local_root)
+        .unwrap_or(&repo_root)
+        .to_path_buf();
 
     // the `[repos]` table has to come after every top-level key, or TOML would read those keys
     // as belonging to the table.
@@ -78,7 +98,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
         ",
             set = &spec.initial_set_name,
             repo = &spec.repo_name,
-            dir = spec.relative_repo_root.display(),
+            dir = configured_dir.display(),
         },
     )
     .map_err(InitError::Profile)?;
@@ -92,7 +112,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
 
     let set_path = set::create_empty_set(
         &profile,
-        &spec.repo_root,
+        &repo_root,
         &SetName(spec.initial_set_name.clone()),
     )?;
 
@@ -100,7 +120,7 @@ pub fn init(opts: &ExecutionOptions, spec: InitSpec) -> Result<InitSuccess, Init
     let ignorefile = set_path.join(".monjaignore");
     fs::write(ignorefile, DEFAULT_IGNORE).map_err(InitError::IgnoreFile)?;
 
-    let readme = spec.repo_root.join("README.md");
+    let readme = repo_root.join("README.md");
     if !readme.exists() {
         fs::write(readme, README).map_err(InitError::Readme)?;
     }
@@ -144,7 +164,7 @@ const README: &str = indoc! {"
 
     To use the dotfiles in this repo:
     1. Install monja
-    2. Clone this repo. The default path is `$XDG_DATA_HOME/monja/repo`, but anywhere works.
+    2. Clone this repo. The default path is `$XDG_DATA_HOME/monja/repos/<name>`, but anywhere works.
     3. Create a profile (see below)
     4. Run `monja file pull`. Keep in mind this can overwrite existing files.
 
@@ -168,6 +188,6 @@ const README: &str = indoc! {"
     # each path can be absolute or relative to $HOME.
     # a set name may only appear in one repo, otherwise it can't be resolved.
     [repos]
-    default = '.local/share/monja/repo'
+    default = '.local/share/monja/repos/default'
     ```
     "};
