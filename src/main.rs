@@ -51,7 +51,9 @@ enum Commands {
     /// Package management commands: add, remove, list, install.
     Package(PackageArgs),
 
-    /// Creates a new set, with specified files, and adds it to the end of the profile.
+    /// Creates a new set, with any specified files, and adds it to the end of the profile.
+    ///
+    /// The set can be created empty, and `--noprofile` skips adding it to the profile.
     ///
     /// Note that this command ignores `.monjaignore` files.
     NewSet(NewSetCommand),

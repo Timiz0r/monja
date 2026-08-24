@@ -21,7 +21,7 @@ fn basic() -> Result<()> {
     let new_set_result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("notinrepo"), sim.local_path("alsonotinrepo")],
         SetName("newset".into()),
         None,
@@ -62,7 +62,7 @@ fn common_prefix() -> Result<()> {
     let new_set_result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![
             sim.local_path("a/b/c/1"),
             sim.local_path("a/b/c/2"),
@@ -107,6 +107,68 @@ fn common_prefix() -> Result<()> {
 }
 
 #[gtest]
+fn empty() -> Result<()> {
+    let sim = Simulator::create();
+
+    let new_set_result = monja::new_set(
+        &sim.profile()?,
+        sim.execution_options(),
+        Some(&AbsolutePath::for_existing_path(sim.profile_path())?),
+        vec![],
+        SetName("newset".into()),
+        None,
+    )?;
+    expect_that!(new_set_result.new_set, pat!(SetName("newset")));
+    expect_that!(new_set_result.files, is_empty());
+
+    expect_that!(sim.repo_root().join("newset").is_dir(), is_true());
+
+    // no files means no shortcut to configure
+    let set_config =
+        monja::SetConfig::load(&sim.repo_root().join("newset"), &SetName("newset".into()))?;
+    expect_that!(set_config.shortcut, none());
+
+    let profile = sim.profile()?;
+    expect_that!(
+        profile.config.target_sets,
+        contains(pat!(SetName("newset")))
+    );
+
+    Ok(())
+}
+
+#[gtest]
+fn no_profile() -> Result<()> {
+    let sim = Simulator::create();
+
+    fs_operation! { LocalManipulation, sim,
+        file "notinrepo" "notinrepo"
+    };
+
+    let new_set_result = monja::new_set(
+        &sim.profile()?,
+        sim.execution_options(),
+        None,
+        vec![sim.local_path("notinrepo")],
+        SetName("newset".into()),
+        None,
+    )?;
+    expect_that!(new_set_result.added_to_profile, is_false());
+
+    fs_operation! { SetValidation, sim, "newset",
+        file "notinrepo" "notinrepo"
+    };
+
+    let profile = sim.profile()?;
+    expect_that!(
+        profile.config.target_sets,
+        not(contains(pat!(SetName("newset"))))
+    );
+
+    Ok(())
+}
+
+#[gtest]
 fn dryrun() -> Result<()> {
     let mut sim = Simulator::create();
 
@@ -119,7 +181,7 @@ fn dryrun() -> Result<()> {
     let new_set_result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("notinrepo"), sim.local_path("alsonotinrepo")],
         SetName("newset".into()),
         None,
@@ -151,7 +213,7 @@ fn set_exists() -> Result<()> {
     let new_set_result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("notinrepo"), sim.local_path("alsonotinrepo")],
         SetName("newset".into()),
         None,

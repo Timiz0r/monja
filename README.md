@@ -89,6 +89,9 @@ where the set should be created.
 
 Also note that `monja newset` can also take files via `-- <file 1> <file 2> ...` or newline-delimited stdin.
 In fact, all three methods of specifying files can be combined.
+Providing no files at all is fine, too: it creates an empty set that files can be `monja file put`ed into later.
+Adding `--noprofile` creates the set without adding it to `target-sets` -- handy for a set this
+machine doesn't use, like one meant for another machine.
 
 ### `git init`
 You'll probably want to turn your monja repo into a git repo.

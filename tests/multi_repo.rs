@@ -335,7 +335,7 @@ fn newset_creates_in_the_requested_repo() -> Result<()> {
     let result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &monja::AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&monja::AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("newfile"), sim.local_path("otherfile")],
         SetName("newset".into()),
         Some(RepoName::from("other")),
@@ -367,7 +367,7 @@ fn newset_without_a_default_repo_errors() -> Result<()> {
     let result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &monja::AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&monja::AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("newfile")],
         SetName("newset".into()),
         None,
@@ -399,7 +399,7 @@ fn newset_uses_the_configured_default_repo() -> Result<()> {
     let result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &monja::AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&monja::AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("newfile"), sim.local_path("otherfile")],
         SetName("newset".into()),
         None,
@@ -426,7 +426,7 @@ fn newset_refuses_a_name_that_exists_in_another_repo() -> Result<()> {
     let result = monja::new_set(
         &sim.profile()?,
         sim.execution_options(),
-        &monja::AbsolutePath::for_existing_path(sim.profile_path())?,
+        Some(&monja::AbsolutePath::for_existing_path(sim.profile_path())?),
         vec![sim.local_path("newfile")],
         SetName("taken".into()),
         Some(RepoName::from("default")),

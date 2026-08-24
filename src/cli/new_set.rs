@@ -19,6 +19,13 @@ pub struct NewSetCommand {
     #[arg(long = "repo", add = ArgValueCandidates::new(completions::repo_names))]
     repo: Option<String>,
 
+    /// If set, the new set will not be added to the profile's `target-sets`.
+    ///
+    /// Handy for creating a set that this machine doesn't use, such as one meant for another
+    /// machine. Note that files copied into an untargeted set won't be tracked locally.
+    #[arg(long = "noprofile")]
+    no_profile: bool,
+
     /// If set, the paths provided will be relative to the local root, ignoring cwd.
     ///
     /// This is typically used when using external tools like `fzf` to select files.
@@ -83,25 +90,41 @@ impl NewSetCommand {
         // there could hypothetically be duplicates between these three sources, or even in a single source
         // let's just assume the user doesnt. and, for all i know, it'll work just fine.
 
-        if files.is_empty() {
-            // could consider it an error, but it's not a big deal that the user didn't provide anything
-            println!("No files selected.");
-            return Ok(());
-        }
+        // no files is fine: it creates an empty set that files can be `put` into later.
 
         let base = xdg::BaseDirectories::with_prefix("monja");
         let path = AbsolutePath::for_existing_path(&base.place_config_file("monja-profile.toml")?)?;
+        let profile_config_path = (!self.no_profile).then_some(&path);
         let repo = self.repo.as_deref().map(RepoName::from);
-        let result = monja::new_set(&profile, &opts, &path, files, SetName(self.new_set), repo)?;
+        let result = monja::new_set(
+            &profile,
+            &opts,
+            profile_config_path,
+            files,
+            SetName(self.new_set),
+            repo,
+        )?;
 
-        println!(
-            "Successfully created new set `{}` in repo `{}` with the following files:",
-            result.new_set, result.repo,
-        );
-        for file in result.files.into_iter() {
-            println!("\t{}", file);
+        if result.files.is_empty() {
+            println!(
+                "Successfully created empty set `{}` in repo `{}`.",
+                result.new_set, result.repo,
+            );
+        } else {
+            println!(
+                "Successfully created new set `{}` in repo `{}` with the following files:",
+                result.new_set, result.repo,
+            );
+            for file in result.files.into_iter() {
+                println!("\t{}", file);
+            }
         }
-        println!("The set has also been added to the profile.");
+
+        if result.added_to_profile {
+            println!("The set has also been added to the profile.");
+        } else {
+            println!("The set was not added to the profile.");
+        }
 
         Ok(())
     }
