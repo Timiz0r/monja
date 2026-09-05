@@ -8,6 +8,7 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use monja::{ExecutionOptions, LocalFilePath, MonjaProfile};
+use walkdir::WalkDir;
 
 mod clean;
 mod pull;
@@ -144,6 +145,39 @@ pub(crate) fn to_local_paths(
         .map(|f| LocalFilePath::from(profile, f.as_ref(), cwd))
         .collect();
     Ok(files?)
+}
+
+pub(crate) fn expand_directories(
+    profile: &MonjaProfile,
+    files: Vec<LocalFilePath>,
+) -> anyhow::Result<Vec<LocalFilePath>> {
+    let mut expanded = Vec::new();
+    for file in files {
+        let absolute_path = profile.local_root.join(&file);
+        if !absolute_path.is_dir() {
+            expanded.push(file);
+            continue;
+        }
+
+        for entry in WalkDir::new(absolute_path).min_depth(1) {
+            let entry = entry?;
+            if entry.path().is_file() {
+                expanded.push(LocalFilePath::from(
+                    profile,
+                    entry.path(),
+                    &profile.local_root,
+                )?);
+            }
+        }
+    }
+    Ok(expanded)
+}
+
+pub(crate) fn interactive_location(
+    profile: &MonjaProfile,
+    cwd: &Path,
+) -> anyhow::Result<LocalFilePath> {
+    Ok(LocalFilePath::from(profile, cwd, &profile.local_root)?)
 }
 
 pub(crate) fn read_paths_from_stdin(

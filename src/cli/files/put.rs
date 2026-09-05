@@ -2,11 +2,14 @@ use std::path::PathBuf;
 
 use clap::Args;
 use clap_complete::engine::ArgValueCandidates;
-use monja::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName};
+use monja::{AbsolutePath, ExecutionOptions, MonjaProfile, SetName};
 
 use crate::completions;
 
-use super::{read_paths_from_stdin, read_paths_interactively, to_local_paths};
+use super::{
+    expand_directories, interactive_location, read_paths_from_stdin, read_paths_interactively,
+    to_local_paths,
+};
 
 #[derive(Args)]
 pub struct PutCommand {
@@ -25,6 +28,8 @@ pub struct PutCommand {
     interactive: bool,
 
     /// The local files to copy.
+    ///
+    /// Directories are expanded recursively.
     ///
     /// These will be combined with any newline-delimited files provided through stdin.
     /// These will also be combined with files provided via `--interactive`.
@@ -46,12 +51,10 @@ impl PutCommand {
 
         let mut stdin_files = read_paths_from_stdin(&profile, cwd)?;
         files.append(&mut stdin_files);
+        files = expand_directories(&profile, files)?;
 
         if self.interactive {
-            let status = monja::local_status(
-                &profile,
-                LocalFilePath::from(&profile, &profile.local_root, cwd)?,
-            )?;
+            let status = monja::local_status(&profile, interactive_location(&profile, cwd)?)?;
 
             // since files_to_push means the (targeted) set already has the file, we don't need to include them.
             // additionally, old_files_after_last_pull is a special category that can contain duplicates of the other categories

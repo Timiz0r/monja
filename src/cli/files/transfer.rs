@@ -2,11 +2,13 @@ use std::path::PathBuf;
 
 use clap::Args;
 use clap_complete::engine::ArgValueCandidates;
-use monja::{AbsolutePath, ExecutionOptions, LocalFilePath, MonjaProfile, SetName};
+use monja::{AbsolutePath, ExecutionOptions, MonjaProfile, SetName};
 
 use crate::completions;
 
-use super::{read_paths_from_stdin, read_paths_interactively, to_local_paths};
+use super::{
+    interactive_location, read_paths_from_stdin, read_paths_interactively, to_local_paths,
+};
 
 #[derive(Args)]
 pub struct TransferCommand {
@@ -53,10 +55,7 @@ impl TransferCommand {
         files.append(&mut stdin_files);
 
         if self.interactive {
-            let status = monja::local_status(
-                &profile,
-                LocalFilePath::from(&profile, &profile.local_root, cwd)?,
-            )?;
+            let status = monja::local_status(&profile, interactive_location(&profile, cwd)?)?;
 
             let interactive_files = status
                 .files_to_push
